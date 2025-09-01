@@ -1,6 +1,25 @@
-# Installation Guide - Asterisk Auto-Dialer
+# Installation Guide - ARI Dialer
 
-This guide provides step-by-step instructions for installing and configuring the Asterisk Auto-Dialer system.
+This comprehensive guide provides step-by-step instructions for installing and configuring the ARI Dialer system with WebSocket integration.
+
+## ✨ What's New in v2.0
+
+### WebSocket Stability Improvements
+This version includes major improvements to the WebSocket connection stability:
+
+- **Persistent Connections**: WebSocket connections now stay active indefinitely
+- **Auto-Reconnection**: Intelligent reconnection with backoff logic
+- **Real-time Events**: Replaced polling with true real-time ARI event processing  
+- **ReactPHP Integration**: Professional WebSocket client implementation
+- **Error Handling**: Comprehensive error handling and logging
+
+### Before vs After
+| Issue | Before | After |
+|-------|---------|--------|
+| Connection drops after 5 seconds | ❌ Yes | ✅ Fixed |
+| Manual restart required | ❌ Yes | ✅ Auto-reconnects |
+| Resource-heavy polling | ❌ Yes | ✅ Event-driven |
+| Connection monitoring | ❌ None | ✅ Real-time logs |
 
 ## Prerequisites
 
@@ -28,10 +47,10 @@ sudo yum update -y
 
 ```bash
 # Ubuntu/Debian
-sudo apt install -y php php-mysql php-curl php-json php-mbstring php-xml mysql-client
+sudo apt install -y php php-mysql php-curl php-json php-mbstring php-xml php-zip mysql-client composer
 
 # CentOS/RHEL
-sudo yum install -y php php-mysql php-curl php-json php-mbstring php-xml mysql
+sudo yum install -y php php-mysql php-curl php-json php-mbstring php-xml php-zip mysql composer
 ```
 
 ## Step 2: Download and Extract
@@ -40,16 +59,16 @@ sudo yum install -y php php-mysql php-curl php-json php-mbstring php-xml mysql
 # Navigate to web root
 cd /var/www/html
 
-# Download the application (replace with actual repository)
-git clone https://github.com/yourrepo/asterisk-dialer.git ari-dialer
-
-# Or download and extract zip file
-wget https://github.com/yourrepo/asterisk-dialer/archive/main.zip
-unzip main.zip
-mv asterisk-dialer-main ari-dialer
-
-# Navigate to application directory
+# Clone the repository
+git clone https://github.com/alexcr-telecom/ari-dialer.git
 cd ari-dialer
+
+# Install PHP dependencies via Composer
+composer install
+
+# Or if Composer is not globally installed
+curl -sS https://getcomposer.org/installer | php
+php composer.phar install
 ```
 
 ## Step 3: Database Setup
@@ -339,6 +358,34 @@ sudo chmod 777 /var/www/html/ari-dialer/recordings
 
 ## Step 8: Start Services
 
+### Start ARI WebSocket Service
+
+**Option 1: Run directly (for testing)**
+```bash
+# Start the ARI service
+php services/ari-service.php
+
+# Or run in background
+nohup php services/ari-service.php > /dev/null 2>&1 &
+```
+
+**Option 2: SystemD Service (recommended for production)**
+```bash
+# Copy systemd service file
+sudo cp services/asterisk-dialer.service /etc/systemd/system/
+
+# Edit the service file if needed
+sudo nano /etc/systemd/system/asterisk-dialer.service
+
+# Enable and start the service
+sudo systemctl daemon-reload
+sudo systemctl enable asterisk-dialer
+sudo systemctl start asterisk-dialer
+
+# Check service status
+sudo systemctl status asterisk-dialer
+```
+
 ### Restart All Services
 
 ```bash
@@ -350,6 +397,7 @@ sudo systemctl restart mysql
 sudo systemctl status asterisk
 sudo systemctl status apache2   # or nginx
 sudo systemctl status mysql
+sudo systemctl status asterisk-dialer  # New WebSocket service
 ```
 
 ### Test Connectivity
@@ -358,8 +406,14 @@ sudo systemctl status mysql
 # Test Asterisk ARI
 curl -u ari_user:ari_secure_password http://localhost:8088/ari/asterisk/info
 
+# Test ARI WebSocket connection
+sudo asterisk -rx "ari show apps"
+
 # Test web server
 curl -I http://localhost/ari-dialer/
+
+# Check ARI service logs
+tail -f /var/www/html/ari-dialer/logs/ari-service.log
 ```
 
 ## Step 9: First Login and Setup
@@ -415,11 +469,14 @@ curl -I http://localhost/ari-dialer/
 ### Check Logs
 
 ```bash
+# ARI WebSocket service logs (NEW!)
+tail -f /var/www/html/ari-dialer/logs/ari-service.log
+
 # Application logs
 tail -f /var/www/html/ari-dialer/logs/error.log
 
 # Asterisk logs
-sudo tail -f /var/log/asterisk/full
+sudo tail -f /var/log/asterisk/full.log
 
 # Web server logs
 sudo tail -f /var/log/apache2/error.log  # or nginx
@@ -442,9 +499,30 @@ php -m | grep mysql
 ### Common Issues
 
 1. **Database connection error**: Verify credentials and database exists
-2. **ARI connection failed**: Check Asterisk configuration and credentials
+2. **ARI connection failed**: Check Asterisk configuration and credentials  
 3. **Permission denied**: Verify file permissions and ownership
 4. **Calls not connecting**: Check dialplan configuration
+5. **WebSocket connection drops**: Check ARI service status and logs
+6. **Composer dependencies missing**: Run `composer install` in application directory
+
+### WebSocket Service Issues
+
+```bash
+# Check if ARI service is running
+sudo systemctl status asterisk-dialer
+
+# View detailed service logs
+journalctl -u asterisk-dialer -f
+
+# Restart the service if needed
+sudo systemctl restart asterisk-dialer
+
+# Check Asterisk ARI applications
+sudo asterisk -rx "ari show apps"
+
+# Test WebSocket manually
+php test-websocket.php
+```
 
 ## Security Hardening
 

@@ -20,7 +20,9 @@
       "Read(/var/log/**)",
       "Bash(sudo tail:*)",
       "Bash(git add:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git commit:*)",
+      "Bash(echo \"After creating the repository on GitHub, run:\n\ngit remote add origin https://github.com/alexcr-telecom/ari-dialer.git\ngit branch -M main\ngit push -u origin main\")"
     ],
     "deny": [],
     "ask": []
