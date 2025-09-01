@@ -214,30 +214,6 @@ echo 'Database connection successful!';
 "
 ```
 
-## 🚀 Recent Updates (v2.0)
-
-### WebSocket Stability Improvements
-- ✅ **Fixed Connection Drops**: Replaced curl-based connections with proper ReactPHP WebSocket client
-- ✅ **Persistent Connections**: WebSocket connections now stay active indefinitely
-- ✅ **Auto-Reconnection**: Intelligent reconnection with exponential backoff (5s/10s delays)
-- ✅ **Real-time Events**: Replaced polling with true real-time ARI event processing
-- ✅ **Error Handling**: Comprehensive error handling and logging for connection issues
-
-### Technical Improvements
-- ✅ **ReactPHP Integration**: Added Ratchet/Pawl WebSocket client library
-- ✅ **Event Loop**: Proper ReactPHP event loop for non-blocking operations  
-- ✅ **Signal Handling**: Graceful shutdown with SIGTERM/SIGINT handling
-- ✅ **Connection Monitoring**: Real-time connection status monitoring
-
-### Before vs After
-| Aspect | Before | After |
-|--------|---------|--------|
-| Connection Type | curl HTTP requests | Persistent WebSocket |
-| Connection Duration | ~5 seconds | Indefinite |
-| Event Processing | 2-second polling | Real-time events |
-| Reconnection | Manual restart required | Automatic reconnection |
-| Resource Usage | High (constant polling) | Low (event-driven) |
-
 ## 📊 Performance & Scalability
 
 ### Capacity
@@ -280,7 +256,7 @@ echo 'Database connection successful!';
 
 - **Issues**: [GitHub Issues](https://github.com/alexcr-telecom/ari-dialer/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/alexcr-telecom/ari-dialer/discussions)
-- **Email**: support@alexcr-telecom.com
+- **Email**: alexcr.telecom@gmail.com
 
 ## 📄 License
 
