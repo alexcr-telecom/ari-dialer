@@ -1,0 +1,130 @@
+<?php
+/**
+ * Asterisk Auto-Dialer Configuration
+ * 
+ * Copy this file to config.php and update with your settings
+ */
+
+class Config {
+    // Database Configuration
+    const DB_HOST = 'localhost';
+    const DB_NAME = 'asterisk_dialer';
+    const DB_USER = 'dialer_user';
+    const DB_PASS = 'your_secure_password_here';
+    
+    // Asterisk ARI Configuration
+    const ARI_HOST = 'localhost';               // Asterisk server IP/hostname
+    const ARI_PORT = 8088;                      // ARI HTTP port
+    const ARI_USER = 'ari_user';                // ARI username
+    const ARI_PASS = 'ari_password';            // ARI password
+    const ARI_APP = 'dialer_app';               // ARI application name
+    
+    // Asterisk Dialer Settings
+    const ASTERISK_CONTEXT = 'from-internal';  // Default dialplan context
+    const MAX_CALLS_PER_MINUTE = 100;          // System-wide call rate limit
+    const DEFAULT_TIMEZONE = 'UTC';            // Default timezone for the system
+    
+    // File System Paths
+    const UPLOAD_DIR = '../uploads/';          // Directory for uploaded files
+    const LOG_DIR = '../logs/';                // Directory for log files
+    const RECORDING_DIR = '../recordings/';     // Directory for call recordings
+    
+    // Security Settings
+    const SESSION_TIMEOUT = 3600;              // Session timeout in seconds (1 hour)
+    const MAX_LOGIN_ATTEMPTS = 5;              // Maximum failed login attempts
+    const LOCKOUT_DURATION = 900;              // Account lockout duration in seconds (15 min)
+    
+    // Application Settings
+    const APP_NAME = 'Asterisk Auto-Dialer';   // Application display name
+    const APP_VERSION = '1.0.0';               // Current version
+    const DEBUG_MODE = false;                   // Enable debug mode (set to false in production)
+    
+    // Email Configuration (optional, for notifications)
+    const SMTP_HOST = 'localhost';
+    const SMTP_PORT = 587;
+    const SMTP_USER = '';
+    const SMTP_PASS = '';
+    const SMTP_FROM_EMAIL = 'noreply@yourdomain.com';
+    const SMTP_FROM_NAME = 'Asterisk Dialer';
+    
+    // Advanced Settings
+    const REDIS_HOST = 'localhost';             // Redis server for caching (if available)
+    const REDIS_PORT = 6379;                   // Redis port
+    const REDIS_PASSWORD = '';                 // Redis password (if required)
+    
+    const ENABLE_API = true;                    // Enable REST API endpoints
+    const API_RATE_LIMIT = 100;                // API requests per minute per user
+    
+    const ENABLE_WEBHOOKS = false;              // Enable webhook notifications
+    const WEBHOOK_SECRET = 'your_webhook_secret_here';
+    
+    // CDR Integration
+    const CDR_TABLE = 'cdr';                   // Asterisk CDR table name
+    const CDR_DATABASE = 'asteriskcdrdb';      // CDR database name (if different)
+    
+    // Recording Settings
+    const ENABLE_RECORDING = false;            // Enable call recording by default
+    const RECORDING_FORMAT = 'wav';            // Recording file format (wav, gsm, mp3)
+    const RECORDING_MAX_DURATION = 3600;       // Maximum recording duration in seconds
+    
+    // Monitoring Settings
+    const WEBSOCKET_TIMEOUT = 30;              // WebSocket timeout in seconds
+    const REFRESH_INTERVAL = 5;                // Dashboard refresh interval in seconds
+    const MAX_CONCURRENT_CALLS = 50;           // Maximum concurrent calls allowed
+    
+    // Predictive Dialing Settings
+    const PREDICTIVE_RATIO = 1.5;              // Predictive dialing ratio
+    const ABANDON_RATE_THRESHOLD = 3;          // Maximum abandon rate percentage
+    const MIN_AGENTS_FOR_PREDICTIVE = 2;       // Minimum agents required for predictive mode
+    
+    // System Limits
+    const MAX_CAMPAIGN_LEADS = 100000;         // Maximum leads per campaign
+    const MAX_UPLOAD_SIZE = '10M';             // Maximum file upload size
+    const MAX_CSV_ROWS = 50000;                // Maximum rows in CSV import
+    
+    // Backup and Maintenance
+    const AUTO_BACKUP = false;                 // Enable automatic backups
+    const BACKUP_RETENTION_DAYS = 30;          // Days to keep backup files
+    const LOG_RETENTION_DAYS = 90;             // Days to keep log files
+    
+    /**
+     * Get configuration value by key
+     * @param string $key
+     * @return mixed
+     */
+    public static function get($key) {
+        return defined("self::$key") ? constant("self::$key") : null;
+    }
+    
+    /**
+     * Check if debug mode is enabled
+     * @return bool
+     */
+    public static function isDebug() {
+        return self::DEBUG_MODE;
+    }
+    
+    /**
+     * Get database DSN string
+     * @return string
+     */
+    public static function getDSN() {
+        return "mysql:host=" . self::DB_HOST . ";dbname=" . self::DB_NAME . ";charset=utf8mb4";
+    }
+    
+    /**
+     * Get ARI connection URL
+     * @return string
+     */
+    public static function getARIUrl() {
+        return "http://" . self::ARI_HOST . ":" . self::ARI_PORT . "/ari";
+    }
+    
+    /**
+     * Get WebSocket URL for ARI events
+     * @return string
+     */
+    public static function getWebSocketUrl() {
+        return "ws://" . self::ARI_HOST . ":" . self::ARI_PORT . "/ari/events";
+    }
+}

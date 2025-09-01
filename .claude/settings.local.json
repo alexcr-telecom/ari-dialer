@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(php:*)",
+      "Read(/var/log/apache2/**)",
+      "Bash(sudo asterisk:*)",
+      "Bash(sudo grep -A 20 -B 5 \"from-internal\" /etc/asterisk/extensions.conf)",
+      "Bash(sudo cp:*)",
+      "Bash(sudo systemctl status:*)",
+      "Bash(sudo -u www-data php:*)",
+      "Bash(sudo systemctl start:*)",
+      "Bash(sudo systemctl restart:*)",
+      "Bash(sudo journalctl:*)",
+      "Bash(curl:*)",
+      "Bash(npm install:*)",
+      "Bash(timeout:*)",
+      "Bash(kill:*)",
+      "Read(/var/log/asterisk/**)",
+      "Read(/var/log/**)",
+      "Bash(sudo tail:*)",
+      "Bash(git add:*)",
+      "Bash(git config:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,35 @@
+# Dependencies
+/vendor/
+composer.phar
+composer.lock
+
+# Configuration
+config/config.php
+
+# Logs
+logs/*.log
+*.log
+
+# Uploads & recordings
+uploads/*
+recordings/*
+!uploads/.gitkeep
+!recordings/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cache
+cache/
+*.cache

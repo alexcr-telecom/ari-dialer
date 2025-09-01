@@ -1,0 +1,20 @@
+<?php
+class Config {
+    const DB_HOST = 'localhost';
+    const DB_NAME = 'asterisk_dialer';
+    const DB_USER = 'dialer_user';
+    const DB_PASS = 'dialer_password';
+    
+    const ARI_HOST = 'localhost';
+    const ARI_PORT = 8088;
+    const ARI_USER = 'ari_user';
+    const ARI_PASS = 'ari_password';
+    const ARI_APP = 'dialer_app';
+    
+    const ASTERISK_CONTEXT = 'from-internal';
+    const MAX_CALLS_PER_MINUTE = 100;
+    const DEFAULT_TIMEZONE = 'Moscow';
+    
+    const UPLOAD_DIR = '../uploads/';
+    const LOG_DIR = '../logs/';
+}

@@ -1,0 +1,102 @@
+# Asterisk Auto-Dialer - Apache Configuration
+
+# Enable rewrite engine
+RewriteEngine On
+
+# Redirect to HTTPS (uncomment for production)
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Security Headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    
+    # Remove server signature
+    Header unset Server
+    Header unset X-Powered-By
+</IfModule>
+
+# Deny access to sensitive files and directories
+<FilesMatch "\.(conf|log|sql|md|txt|env)$">
+    Require all denied
+</FilesMatch>
+
+# Deny access to configuration directory
+<Directory "config">
+    Require all denied
+</Directory>
+
+# Deny access to SQL files
+<Directory "sql">
+    Require all denied
+</Directory>
+
+# Deny access to logs directory via web
+<Directory "logs">
+    Require all denied
+</Directory>
+
+# Hide .git directory
+<DirectoryMatch "\.git">
+    Require all denied
+</DirectoryMatch>
+
+# Deny access to backup files
+<FilesMatch "\.(bak|backup|old|tmp|temp)$">
+    Require all denied
+</FilesMatch>
+
+# Prevent access to PHP files in uploads directory
+<Directory "uploads">
+    <FilesMatch "\.php$">
+        Require all denied
+    </FilesMatch>
+</Directory>
+
+# Custom error pages (optional)
+ErrorDocument 403 /error.php?code=403
+ErrorDocument 404 /error.php?code=404
+ErrorDocument 500 /error.php?code=500
+
+# Enable compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Set cache headers for static files
+<IfModule mod_expires.c>
+    ExpiresActive on
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+</IfModule>
+
+# Disable directory browsing
+Options -Indexes
+
+# Protect against DDoS
+<IfModule mod_limitipconn.c>
+    MaxConnPerIP 10
+</IfModule>
+
+# Rate limiting (if mod_limitipconn is not available)
+<IfModule mod_rewrite.c>
+    RewriteMap hosts-deny txt:/var/www/html/ari-dialer/.htaccess-deny
+    RewriteCond ${hosts-deny:%{REMOTE_ADDR}|NOT-FOUND} !=NOT-FOUND [OR]
+    RewriteCond ${hosts-deny:%{REMOTE_HOST}|NOT-FOUND} !=NOT-FOUND
+    RewriteRule ^.*$ - [F]
+</IfModule>
+
+# MIME types
+<IfModule mod_mime.c>
+    AddType application/json .json
+    AddType font/woff .woff
+    AddType font/woff2 .woff2
+</IfModule>
