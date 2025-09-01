@@ -1,0 +1,555 @@
+{
+  "info": {
+    "name": "ARI Dialer API",
+    "description": "Complete API collection for ARI Dialer system",
+    "version": "2.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost/ari-dialer/api",
+      "type": "string"
+    },
+    {
+      "key": "campaign_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "lead_id",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "System Status",
+      "item": [
+        {
+          "name": "Get System Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/status.php",
+              "host": ["{{base_url}}"],
+              "path": ["status.php"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Campaigns",
+      "item": [
+        {
+          "name": "Get All Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/campaigns.php",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Campaign by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/campaigns.php?id={{campaign_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{campaign_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Campaigns with Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/campaigns.php?status=active&limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"create\",\n  \"name\": \"Test Campaign\",\n  \"context\": \"from-internal\",\n  \"max_calls_per_minute\": 50,\n  \"agent_extension\": \"1001\",\n  \"caller_id\": \"Test Campaign\",\n  \"description\": \"Test campaign created via API\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/campaigns.php",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Campaign",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{campaign_id}},\n  \"name\": \"Updated Campaign Name\",\n  \"max_calls_per_minute\": 75\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/campaigns.php",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"start\",\n  \"id\": {{campaign_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/campaigns.php",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Pause Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"pause\",\n  \"id\": {{campaign_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/campaigns.php",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"stop\",\n  \"id\": {{campaign_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/campaigns.php",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Campaign",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/campaigns.php?id={{campaign_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["campaigns.php"],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{campaign_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "Get Campaign Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads.php?campaign_id={{campaign_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads.php"],
+              "query": [
+                {
+                  "key": "campaign_id",
+                  "value": "{{campaign_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads.php?campaign_id={{campaign_id}}&id={{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads.php"],
+              "query": [
+                {
+                  "key": "campaign_id",
+                  "value": "{{campaign_id}}"
+                },
+                {
+                  "key": "id",
+                  "value": "{{lead_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Leads with Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads.php?campaign_id={{campaign_id}}&status=pending&limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["leads.php"],
+              "query": [
+                {
+                  "key": "campaign_id",
+                  "value": "{{campaign_id}}"
+                },
+                {
+                  "key": "status",
+                  "value": "pending"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"create\",\n  \"campaign_id\": {{campaign_id}},\n  \"phone\": \"15551234567\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john@example.com\",\n  \"priority\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads.php",
+              "host": ["{{base_url}}"],
+              "path": ["leads.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Import Leads",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"bulk_import\",\n  \"campaign_id\": {{campaign_id}},\n  \"leads\": [\n    {\n      \"phone\": \"15551234567\",\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"email\": \"john@example.com\"\n    },\n    {\n      \"phone\": \"15551234568\",\n      \"first_name\": \"Jane\",\n      \"last_name\": \"Smith\",\n      \"email\": \"jane@example.com\"\n    },\n    {\n      \"phone\": \"15551234569\",\n      \"first_name\": \"Bob\",\n      \"last_name\": \"Johnson\",\n      \"email\": \"bob@example.com\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads.php",
+              "host": ["{{base_url}}"],
+              "path": ["leads.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Lead",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaign_id\": {{campaign_id}},\n  \"id\": {{lead_id}},\n  \"first_name\": \"Johnny\",\n  \"status\": \"dialed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads.php",
+              "host": ["{{base_url}}"],
+              "path": ["leads.php"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Lead",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads.php?campaign_id={{campaign_id}}&id={{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads.php"],
+              "query": [
+                {
+                  "key": "campaign_id",
+                  "value": "{{campaign_id}}"
+                },
+                {
+                  "key": "id",
+                  "value": "{{lead_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Charts & Analytics",
+      "item": [
+        {
+          "name": "Get Overview Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/charts.php?type=overview",
+              "host": ["{{base_url}}"],
+              "path": ["charts.php"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "overview"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Dispositions Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/charts.php?type=dispositions",
+              "host": ["{{base_url}}"],
+              "path": ["charts.php"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "dispositions"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Hourly Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/charts.php?type=hourly",
+              "host": ["{{base_url}}"],
+              "path": ["charts.php"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "hourly"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/charts.php?type=daily",
+              "host": ["{{base_url}}"],
+              "path": ["charts.php"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "daily"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/charts.php?type=statistics",
+              "host": ["{{base_url}}"],
+              "path": ["charts.php"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "statistics"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Data with Date Range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/charts.php?type=daily&date_from=2024-01-01&date_to=2024-01-31",
+              "host": ["{{base_url}}"],
+              "path": ["charts.php"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "daily"
+                },
+                {
+                  "key": "date_from",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "date_to",
+                  "value": "2024-01-31"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Campaign Specific Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/charts.php?type=overview&campaign_id={{campaign_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["charts.php"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "overview"
+                },
+                {
+                  "key": "campaign_id",
+                  "value": "{{campaign_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

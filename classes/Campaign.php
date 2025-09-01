@@ -13,20 +13,25 @@ class Campaign {
                 VALUES (:name, :description, :status, :start_date, :end_date, :context, :outbound_context, :extension, :priority, :max_calls_per_minute, :retry_attempts, :retry_interval)";
         
         $stmt = $this->db->prepare($sql);
-        return $stmt->execute([
+        $result = $stmt->execute([
             ':name' => $data['name'],
-            ':description' => $data['description'],
+            ':description' => $data['description'] ?? '',
             ':status' => $data['status'] ?? 'paused',
             ':start_date' => $data['start_date'] ?? null,
             ':end_date' => $data['end_date'] ?? null,
-            ':context' => $data['context'] ?? Config::ASTERISK_CONTEXT,
+            ':context' => $data['context'] ?? 'from-internal',
             ':outbound_context' => $data['outbound_context'] ?? 'from-internal',
-            ':extension' => $data['extension'] ?? '101',
+            ':extension' => $data['agent_extension'] ?? $data['extension'] ?? '101',
             ':priority' => $data['priority'] ?? 1,
             ':max_calls_per_minute' => $data['max_calls_per_minute'] ?? 10,
             ':retry_attempts' => $data['retry_attempts'] ?? 3,
             ':retry_interval' => $data['retry_interval'] ?? 300
         ]);
+        
+        if ($result) {
+            return $this->db->lastInsertId();
+        }
+        return false;
     }
     
     public function getAll($filters = []) {
@@ -104,7 +109,7 @@ class Campaign {
         return $stmt->execute([':id' => $id]);
     }
     
-    public function addLead($campaignId, $phoneNumber, $name = null) {
+    public function addLeadOld($campaignId, $phoneNumber, $name = null) {
         $sql = "INSERT INTO leads (campaign_id, phone_number, name) VALUES (:campaign_id, :phone_number, :name)";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([
@@ -135,7 +140,7 @@ class Campaign {
         }
     }
     
-    public function getLeads($campaignId, $status = null, $limit = null, $offset = null) {
+    public function getLeadsOld($campaignId, $status = null, $limit = null, $offset = null) {
         $sql = "SELECT * FROM leads WHERE campaign_id = :campaign_id";
         $params = [':campaign_id' => $campaignId];
         
@@ -206,6 +211,129 @@ class Campaign {
                     FROM campaign_stats";
             $stmt = $this->db->query($sql);
             return $stmt->fetch();
+        }
+    }
+    
+    // API-specific methods for leads management
+    public function addLead($data) {
+        $sql = "INSERT INTO leads (campaign_id, phone_number, first_name, last_name, email, status, priority) 
+                VALUES (:campaign_id, :phone_number, :first_name, :last_name, :email, :status, :priority)";
+        
+        $stmt = $this->db->prepare($sql);
+        $result = $stmt->execute([
+            ':campaign_id' => $data['campaign_id'],
+            ':phone_number' => $data['phone'],
+            ':first_name' => $data['first_name'] ?? '',
+            ':last_name' => $data['last_name'] ?? '',
+            ':email' => $data['email'] ?? '',
+            ':status' => $data['status'] ?? 'pending',
+            ':priority' => $data['priority'] ?? 5
+        ]);
+        
+        if ($result) {
+            return $this->db->lastInsertId();
+        }
+        return false;
+    }
+    
+    public function getLeadById($campaignId, $leadId) {
+        $sql = "SELECT * FROM leads WHERE campaign_id = :campaign_id AND id = :id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':campaign_id' => $campaignId, ':id' => $leadId]);
+        return $stmt->fetch();
+    }
+    
+    public function getLeads($filters) {
+        $sql = "SELECT * FROM leads WHERE campaign_id = :campaign_id";
+        $params = [':campaign_id' => $filters['campaign_id']];
+        
+        if (!empty($filters['status'])) {
+            $sql .= " AND status = :status";
+            $params[':status'] = $filters['status'];
+        }
+        
+        if (!empty($filters['phone'])) {
+            $sql .= " AND phone_number = :phone";
+            $params[':phone'] = $filters['phone'];
+        }
+        
+        $sql .= " ORDER BY created_at ASC";
+        
+        if (!empty($filters['limit'])) {
+            $sql .= " LIMIT " . (int)$filters['limit'];
+            if (!empty($filters['offset'])) {
+                $sql .= " OFFSET " . (int)$filters['offset'];
+            }
+        }
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+    
+    public function updateLead($campaignId, $leadId, $data) {
+        $setParts = [];
+        $params = [':campaign_id' => $campaignId, ':id' => $leadId];
+        
+        foreach ($data as $field => $value) {
+            if ($field === 'phone') {
+                $setParts[] = "phone_number = :phone_number";
+                $params[':phone_number'] = $value;
+            } else {
+                $setParts[] = "$field = :$field";
+                $params[":$field"] = $value;
+            }
+        }
+        
+        if (empty($setParts)) {
+            return false;
+        }
+        
+        $sql = "UPDATE leads SET " . implode(', ', $setParts) . " WHERE campaign_id = :campaign_id AND id = :id";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute($params);
+    }
+    
+    public function deleteLead($campaignId, $leadId) {
+        $sql = "DELETE FROM leads WHERE campaign_id = :campaign_id AND id = :id";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([':campaign_id' => $campaignId, ':id' => $leadId]);
+    }
+    
+    public function bulkImportLeads($leads) {
+        $this->db->beginTransaction();
+        try {
+            $imported = 0;
+            $skipped = 0;
+            
+            $sql = "INSERT IGNORE INTO leads (campaign_id, phone_number, first_name, last_name, email, status, priority) 
+                    VALUES (:campaign_id, :phone_number, :first_name, :last_name, :email, :status, :priority)";
+            $stmt = $this->db->prepare($sql);
+            
+            foreach ($leads as $lead) {
+                $result = $stmt->execute([
+                    ':campaign_id' => $lead['campaign_id'],
+                    ':phone_number' => $lead['phone'],
+                    ':first_name' => $lead['first_name'] ?? '',
+                    ':last_name' => $lead['last_name'] ?? '',
+                    ':email' => $lead['email'] ?? '',
+                    ':status' => $lead['status'] ?? 'pending',
+                    ':priority' => $lead['priority'] ?? 5
+                ]);
+                
+                if ($result && $stmt->rowCount() > 0) {
+                    $imported++;
+                } else {
+                    $skipped++;
+                }
+            }
+            
+            $this->db->commit();
+            return ['success' => true, 'imported' => $imported, 'skipped' => $skipped];
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            error_log("Bulk import error: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
         }
     }
 }
