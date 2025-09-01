@@ -33,3 +33,6 @@ Thumbs.db
 # Cache
 cache/
 *.cache
+
+# Claude Code settings
+.claude/
