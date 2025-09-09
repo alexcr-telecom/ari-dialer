@@ -12,6 +12,7 @@ CREATE TABLE campaigns (
     start_date DATETIME,
     end_date DATETIME,
     context VARCHAR(50) DEFAULT 'from-internal',
+    outbound_context VARCHAR(50) DEFAULT 'from-internal',
     extension VARCHAR(20) DEFAULT '101',
     priority INT DEFAULT 1,
     max_calls_per_minute INT DEFAULT 10,
