@@ -1,4 +1,9 @@
 -- Asterisk Auto-Dialer Database Schema
+-- 
+-- Installation Notes:
+-- - If you use FreePBX, DO NOT change Asterisk configuration files manually
+-- - FreePBX already has all necessary contexts and configurations
+-- - Use FreePBX web interface to configure ARI users and HTTP settings
 
 CREATE DATABASE IF NOT EXISTS asterisk_dialer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE asterisk_dialer;

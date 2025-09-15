@@ -3,7 +3,7 @@
     "description": "Asterisk ARI Auto-Dialer Application",
     "type": "project",
     "require": {
-        "php": ">=7.4",
+        "php": ">=7.0",
         "ratchet/pawl": "^0.4",
         "react/socket": "^1.0"
     },

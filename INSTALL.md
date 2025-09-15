@@ -153,6 +153,8 @@ class Config {
 
 ## Step 5: Asterisk Configuration
 
+**⚠️ FreePBX Users**: If you are using FreePBX, DO NOT modify the Asterisk configuration files manually (`ari.conf`, `http.conf`, `extensions.conf`). FreePBX already has all the necessary contexts and configurations. Use the FreePBX web interface to configure ARI users and HTTP settings instead.
+
 ### Configure ARI
 
 Edit `/etc/asterisk/ari.conf`:

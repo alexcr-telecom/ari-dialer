@@ -245,7 +245,7 @@ class Campaign {
     
     public function getLeads($filters) {
         $sql = "SELECT * FROM leads WHERE campaign_id = :campaign_id";
-        $params = [':campaign_id' => $filters['campaign_id']];
+        $params = [':campaign_id' => $filters['campaign_id'] ?? null];
         
         if (!empty($filters['status'])) {
             $sql .= " AND status = :status";
