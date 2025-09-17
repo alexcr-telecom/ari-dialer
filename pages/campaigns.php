@@ -254,15 +254,15 @@ if ($action === 'delete' && $campaignId) {
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="start_date" class="form-label">Start Date</label>
-                                    <input type="datetime-local" class="form-control" name="start_date" id="start_date" 
-                                           value="<?php echo isset($campaignData['start_date']) && $campaignData['start_date'] ? date('Y-m-d\TH:i', strtotime($campaignData['start_date'])) : ''; ?>">
+                                    <input type="datetime-local" class="form-control" name="start_date" id="start_date"
+                                           value="<?php echo isset($campaignData['start_date']) && $campaignData['start_date'] ? date('Y-m-d\TH:i', strtotime($campaignData['start_date'])) : date('Y-m-d\T09:00'); ?>">
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="end_date" class="form-label">End Date</label>
-                                    <input type="datetime-local" class="form-control" name="end_date" id="end_date" 
-                                           value="<?php echo isset($campaignData['end_date']) && $campaignData['end_date'] ? date('Y-m-d\TH:i', strtotime($campaignData['end_date'])) : ''; ?>">
+                                    <input type="datetime-local" class="form-control" name="end_date" id="end_date"
+                                           value="<?php echo isset($campaignData['end_date']) && $campaignData['end_date'] ? date('Y-m-d\TH:i', strtotime($campaignData['end_date'])) : date('Y-m-d\T18:00'); ?>">
                                 </div>
                             </div>
                         </div>

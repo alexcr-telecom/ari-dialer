@@ -147,7 +147,7 @@ class Dialer {
             $this->log("Making outbound call to: $endpoint for agent: $agentExtension");
 
             // Create the outbound call using ARI originateCall method
-            $response = $this->ari->originateCall($endpoint, $agentExtension, $outboundContext, 1, $variables);
+            $response = $this->ari->originateCall($endpoint, $agentExtension, $agentContext, 1, $variables);
 
             $this->log("ARI response: " . json_encode($response));
 
