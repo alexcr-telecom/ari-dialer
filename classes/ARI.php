@@ -16,20 +16,21 @@ class ARI {
     
     public function originateCall($endpoint, $extension, $context = null, $priority = 1, $variables = []) {
         $context = $context ?? Config::ASTERISK_CONTEXT;
-        
+
         $data = [
             'endpoint' => $endpoint,
             'extension' => $extension,
             'context' => $context,
             'priority' => $priority,
-            'app' => $this->app,
-            'timeout' => 30
+            'timeout' => 120
         ];
-        
+
         if (!empty($variables)) {
-            $data['variables'] = $variables;
+            foreach ($variables as $key => $value) {
+                $data['variables[' . $key . ']'] = $value;
+            }
         }
-        
+
         return $this->makeRequest('POST', '/channels', $data);
     }
     
@@ -105,7 +106,14 @@ class ARI {
     
     public function makeRequest($method, $endpoint, $data = null) {
         $url = $this->baseUrl . $endpoint;
-        
+
+        // Log ARI request
+        $requestLog = "[ARI REQUEST] " . date('Y-m-d H:i:s') . " - $method $endpoint";
+        if ($data) {
+            $requestLog .= " | Data: " . json_encode($data);
+        }
+        $this->logToErrorLog($requestLog);
+
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
@@ -118,7 +126,7 @@ class ARI {
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false
         ]);
-        
+
         if ($data && in_array($method, ['POST', 'PUT', 'PATCH'])) {
             if ($method === 'POST' && $endpoint === '/channels') {
                 curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
@@ -127,20 +135,29 @@ class ARI {
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
             }
         }
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         curl_close($ch);
-        
+
+        // Log ARI response
+        $responseLog = "[ARI RESPONSE] " . date('Y-m-d H:i:s') . " - $method $endpoint | HTTP: $httpCode";
+        if ($error) {
+            $responseLog .= " | cURL Error: $error";
+        } else {
+            $responseLog .= " | Response: " . (strlen($response) > 1000 ? substr($response, 0, 1000) . '...[truncated]' : $response);
+        }
+        $this->logToErrorLog($responseLog);
+
         if ($error) {
             throw new Exception('cURL Error: ' . $error);
         }
-        
+
         if ($httpCode >= 400) {
             throw new Exception('HTTP Error ' . $httpCode . ': ' . $response);
         }
-        
+
         return json_decode($response, true);
     }
     
@@ -158,5 +175,11 @@ class ARI {
                 'message' => 'Connection failed: ' . $e->getMessage()
             ];
         }
+    }
+
+    private function logToErrorLog($message) {
+        $logMessage = $message . PHP_EOL;
+        file_put_contents(__DIR__ . '/../logs/error.log', $logMessage, FILE_APPEND | LOCK_EX);
+        error_log($message);
     }
 }

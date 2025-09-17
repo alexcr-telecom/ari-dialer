@@ -130,6 +130,7 @@ class Dialer {
             }
 
             $outboundContext = $campaignData['outbound_context'] ?? 'from-internal';
+            $agentContext = $campaignData['context'] ?? 'from-internal';
             $endpoint = 'Local/' . $lead['phone_number'] . '@' . $outboundContext;
             $agentExtension = $campaignData['extension'] ?? '101';
 
@@ -139,22 +140,14 @@ class Dialer {
                 'CAMPAIGN_ID' => $campaignId,
                 'LEAD_ID' => $lead['id'],
                 'AGENT_EXTENSION' => $agentExtension,
-                'CAMPAIGN_NAME' => $campaignData['name']
+                'CAMPAIGN_NAME' => $campaignData['name'],
+                'AGENT_CONTEXT' => $agentContext
             ];
 
-            $requestData = [
-                'endpoint' => $endpoint,
-                'app' => Config::ARI_APP,
-                'appArgs' => $agentExtension,
-                'callerId' => $agentExtension,
-                'timeout' => 30,
-                'variables' => $variables
-            ];
+            $this->log("Making outbound call to: $endpoint for agent: $agentExtension");
 
-            $this->log("ARI request data: " . json_encode($requestData));
-
-            // Create the outbound call using ARI
-            $response = $this->ari->makeRequest('POST', '/channels', $requestData);
+            // Create the outbound call using ARI originateCall method
+            $response = $this->ari->originateCall($endpoint, $agentExtension, $outboundContext, 1, $variables);
 
             $this->log("ARI response: " . json_encode($response));
 
@@ -228,7 +221,7 @@ class Dialer {
             
             if ($channelInfo && $channelInfo['state'] === 'Up') {
                 // Call was answered, now connect to agent
-                $this->connectToAgent($channelId, $agentExtension);
+                $this->connectToAgent($channelId, $agentExtension, $agentContext);
             } else {
                 // Call not answered yet, we'll handle this in ChannelStateChange
                 error_log("Outbound call not answered yet, waiting...");
@@ -236,16 +229,12 @@ class Dialer {
         }
     }
     
-    private function connectToAgent($outboundChannelId, $agentExtension) {
+    private function connectToAgent($outboundChannelId, $agentExtension, $agentContext = 'from-internal') {
         try {
             error_log("Connecting answered call {$outboundChannelId} to agent {$agentExtension}");
-            
+
             // Create agent channel
-            $agentChannel = $this->ari->makeRequest('POST', '/channels', [
-                'endpoint' => "Local/{$agentExtension}@from-internal",
-                'app' => Config::ARI_APP,
-                'appArgs' => 'agent'
-            ]);
+            $agentChannel = $this->ari->originateCall("Local/{$agentExtension}@{$agentContext}", $agentExtension, $agentContext, 1);
             
             if ($agentChannel && isset($agentChannel['id'])) {
                 $agentChannelId = $agentChannel['id'];
@@ -323,7 +312,8 @@ class Dialer {
                 // If this is an outbound call managed by our ARI app, connect to agent
                 if (isset($channel['channelvars']['AGENT_EXTENSION'])) {
                     $agentExtension = $channel['channelvars']['AGENT_EXTENSION'];
-                    $this->connectToAgent($channelId, $agentExtension);
+                    $agentContext = $channel['channelvars']['AGENT_CONTEXT'] ?? 'from-internal';
+                    $this->connectToAgent($channelId, $agentExtension, $agentContext);
                 }
                 
                 if ($this->shouldRecord()) {
