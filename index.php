@@ -33,6 +33,7 @@ $page = $_GET['page'] ?? 'dashboard';
             <div class="navbar-nav">
                 <a class="nav-link <?php echo $page === 'dashboard' ? 'active' : ''; ?>" href="?page=dashboard">Dashboard</a>
                 <a class="nav-link <?php echo $page === 'campaigns' ? 'active' : ''; ?>" href="?page=campaigns">Campaigns</a>
+                <a class="nav-link <?php echo $page === 'call-logs' ? 'active' : ''; ?>" href="?page=call-logs">Call Logs</a>
                 <a class="nav-link <?php echo $page === 'cdr' ? 'active' : ''; ?>" href="?page=cdr">CDR</a>
                 <a class="nav-link <?php echo $page === 'monitoring' ? 'active' : ''; ?>" href="?page=monitoring">Monitoring</a>
             </div>
@@ -59,6 +60,9 @@ $page = $_GET['page'] ?? 'dashboard';
         switch ($page) {
             case 'campaigns':
                 include 'pages/campaigns.php';
+                break;
+            case 'call-logs':
+                include 'pages/call-logs.php';
                 break;
             case 'cdr':
                 include 'pages/cdr.php';

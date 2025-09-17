@@ -1,25 +1,35 @@
 # Installation Guide - ARI Dialer
 
-This comprehensive guide provides step-by-step instructions for installing and configuring the ARI Dialer system with WebSocket integration.
+This comprehensive guide provides step-by-step instructions for installing and configuring the ARI Dialer system with WebSocket integration and comprehensive call logging.
 
-## ✨ What's New in v2.0
+## ✨ What's New in v2.1
 
-### WebSocket Stability Improvements
-This version includes major improvements to the WebSocket connection stability:
+### Major Features Added
+- **📊 Comprehensive Call Logging**: Real-time call tracking with detailed logs
+- **🔍 Advanced Call Logs UI**: Rich web interface with filtering, statistics, and auto-refresh
+- **📈 Call Statistics**: Visual dashboards showing call metrics and success rates
+- **🛠 Enhanced Debugging**: Detailed logging system in `logs/error.log`
+- **⚡ Fixed Call Origination**: Resolved critical bug preventing calls from starting
+- **🔄 Real-time Updates**: Live call status monitoring with WebSocket events
 
-- **Persistent Connections**: WebSocket connections now stay active indefinitely
-- **Auto-Reconnection**: Intelligent reconnection with backoff logic
-- **Real-time Events**: Replaced polling with true real-time ARI event processing  
-- **ReactPHP Integration**: Professional WebSocket client implementation
-- **Error Handling**: Comprehensive error handling and logging
+### Call Logging Features
+- **Date/Time tracking** for every call attempt
+- **Phone number** and **lead information**
+- **Call status** (initiated, ringing, answered, failed, hung_up)
+- **Response/disposition** tracking
+- **Duration** calculation
+- **Channel ID** monitoring for debugging
+- **Agent extension** assignment
+- **Campaign association**
 
-### Before vs After
-| Issue | Before | After |
-|-------|---------|--------|
-| Connection drops after 5 seconds | ❌ Yes | ✅ Fixed |
-| Manual restart required | ❌ Yes | ✅ Auto-reconnects |
-| Resource-heavy polling | ❌ Yes | ✅ Event-driven |
-| Connection monitoring | ❌ None | ✅ Real-time logs |
+### Before vs After v2.1
+| Feature | Before | After |
+|---------|---------|--------|
+| Call visibility | ❌ None | ✅ Complete logs |
+| Call debugging | ❌ Limited | ✅ Detailed traces |
+| Real-time status | ❌ No | ✅ Live updates |
+| Call statistics | ❌ None | ✅ Rich dashboards |
+| Error logging | ❌ Basic | ✅ Comprehensive |
 
 ## Prerequisites
 
@@ -356,6 +366,37 @@ sudo mkdir -p /var/www/html/ari-dialer/{uploads,logs,recordings}
 sudo chmod 777 /var/www/html/ari-dialer/uploads
 sudo chmod 777 /var/www/html/ari-dialer/logs
 sudo chmod 777 /var/www/html/ari-dialer/recordings
+
+# Create log files with proper permissions
+sudo touch /var/www/html/ari-dialer/logs/error.log
+sudo touch /var/www/html/ari-dialer/logs/ari-service.log
+sudo chmod 666 /var/www/html/ari-dialer/logs/*.log
+sudo chown www-data:www-data /var/www/html/ari-dialer/logs/*.log
+```
+
+### Configure Log Rotation (Optional)
+
+To prevent log files from growing too large, set up log rotation:
+
+```bash
+sudo nano /etc/logrotate.d/ari-dialer
+```
+
+Add the following configuration:
+
+```
+/var/www/html/ari-dialer/logs/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    notifempty
+    create 666 www-data www-data
+    postrotate
+        # Restart ARI service if running as systemd service
+        /bin/systemctl restart asterisk-dialer 2>/dev/null || true
+    endscript
+}
 ```
 
 ## Step 8: Start Services
@@ -501,11 +542,14 @@ php -m | grep mysql
 ### Common Issues
 
 1. **Database connection error**: Verify credentials and database exists
-2. **ARI connection failed**: Check Asterisk configuration and credentials  
+2. **ARI connection failed**: Check Asterisk configuration and credentials
 3. **Permission denied**: Verify file permissions and ownership
-4. **Calls not connecting**: Check dialplan configuration
+4. **Calls not connecting**: Check dialplan configuration and lead status
 5. **WebSocket connection drops**: Check ARI service status and logs
 6. **Composer dependencies missing**: Run `composer install` in application directory
+7. **Calls not starting**: Check `logs/error.log` for "Found 0 pending leads" errors
+8. **Call logs not appearing**: Verify database permissions and call_logs table exists
+9. **Log files not writable**: Check permissions on `logs/` directory
 
 ### WebSocket Service Issues
 

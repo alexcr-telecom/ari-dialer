@@ -252,15 +252,18 @@ class ARIService {
         exit(0);
     }
     
-    private function log($message) {
+    private function log($message, $level = 'INFO') {
         $timestamp = date('Y-m-d H:i:s');
-        $logMessage = "[$timestamp] ARI-SERVICE: $message\n";
-        
+        $logMessage = "[$timestamp] [$level] ARI-SERVICE: $message\n";
+
         echo $logMessage;
-        
-        // Also log to file
+
+        // Also log to files
         $logFile = __DIR__ . '/../logs/ari-service.log';
         file_put_contents($logFile, $logMessage, FILE_APPEND | LOCK_EX);
+
+        $errorLogFile = __DIR__ . '/../logs/error.log';
+        file_put_contents($errorLogFile, $logMessage, FILE_APPEND | LOCK_EX);
     }
     
     public function makeRequest($method, $endpoint, $data = null) {

@@ -126,10 +126,12 @@ try {
                     $filters['status'] = $status;
                 }
                 
-                [$limit, $offset] = Validator::validatePagination(
-                    $_GET['limit'] ?? 50, 
+                $pagination = Validator::validatePagination(
+                    $_GET['limit'] ?? 50,
                     $_GET['offset'] ?? 0
                 );
+                $limit = $pagination[0];
+                $offset = $pagination[1];
                 
                 $filters['limit'] = $limit;
                 $filters['offset'] = $offset;

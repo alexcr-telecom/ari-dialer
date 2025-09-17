@@ -1,9 +1,20 @@
--- Asterisk Auto-Dialer Database Schema
--- 
+-- Asterisk Auto-Dialer Database Schema v2.1
+--
+-- Enhanced Features:
+-- - Comprehensive call logging with detailed tracking
+-- - Real-time call status monitoring
+-- - Call statistics and analytics
+-- - Enhanced debugging and error tracking
+--
 -- Installation Notes:
 -- - If you use FreePBX, DO NOT change Asterisk configuration files manually
 -- - FreePBX already has all necessary contexts and configurations
 -- - Use FreePBX web interface to configure ARI users and HTTP settings
+--
+-- Version History:
+-- v2.1: Added comprehensive call logging, enhanced debugging, fixed call origination
+-- v2.0: Added WebSocket stability improvements, ReactPHP integration
+-- v1.0: Initial release with basic dialing functionality
 
 CREATE DATABASE IF NOT EXISTS asterisk_dialer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE asterisk_dialer;
@@ -46,25 +57,32 @@ CREATE TABLE leads (
     INDEX idx_phone_number (phone_number)
 );
 
--- Call logs table for tracking individual calls
+-- Call logs table for comprehensive call tracking (NEW in v2.1)
+-- This table provides detailed logging for every call attempt with:
+-- - Real-time status tracking (initiated → ringing → answered/failed)
+-- - Duration calculation for answered calls
+-- - Channel ID for Asterisk debugging
+-- - Disposition tracking (ANSWERED, BUSY, NO ANSWER, etc.)
+-- - Agent assignment and campaign association
 CREATE TABLE call_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    lead_id INT,
-    campaign_id INT NOT NULL,
-    phone_number VARCHAR(20) NOT NULL,
-    agent_extension VARCHAR(20),
-    channel_id VARCHAR(100),
-    call_start DATETIME,
-    call_end DATETIME,
-    duration INT DEFAULT 0,
+    lead_id INT,                           -- Reference to lead (NULL if direct dial)
+    campaign_id INT NOT NULL,              -- Campaign this call belongs to
+    phone_number VARCHAR(20) NOT NULL,     -- Phone number being dialed
+    agent_extension VARCHAR(20),           -- Agent extension handling the call
+    channel_id VARCHAR(100),               -- Asterisk channel ID for debugging
+    call_start DATETIME,                   -- When call was initiated
+    call_end DATETIME,                     -- When call ended (NULL if ongoing)
+    duration INT DEFAULT 0,                -- Call duration in seconds
     status ENUM('initiated', 'ringing', 'answered', 'failed', 'hung_up') DEFAULT 'initiated',
-    disposition VARCHAR(50),
-    recording_file VARCHAR(255),
+    disposition VARCHAR(50),               -- Call result (ANSWERED, BUSY, NO ANSWER, etc.)
+    recording_file VARCHAR(255),           -- Path to call recording (if enabled)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL,
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
-    INDEX idx_campaign_date (campaign_id, call_start),
-    INDEX idx_channel_id (channel_id)
+    INDEX idx_campaign_date (campaign_id, call_start),  -- For campaign reports
+    INDEX idx_channel_id (channel_id),                  -- For debugging
+    INDEX idx_status_date (status, call_start)          -- For status reports
 );
 
 -- Agents table

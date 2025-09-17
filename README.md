@@ -1,11 +1,20 @@
-# ARI Dialer
+# ARI Dialer v2.1
 
-Professional Asterisk ARI Auto-Dialer Application with real-time WebSocket integration for high-performance predictive dialing.
+Professional Asterisk ARI Auto-Dialer Application with comprehensive call logging, real-time WebSocket integration, and advanced debugging capabilities for high-performance predictive dialing.
 
 ## 🚀 Features
 
+### 🆕 New in v2.1
+- **📊 Comprehensive Call Logging**: Real-time tracking of every call attempt with detailed status
+- **🔍 Advanced Call Logs UI**: Rich web interface with filtering, search, and auto-refresh
+- **📈 Call Statistics Dashboard**: Visual metrics showing success rates, duration, and trends
+- **🛠 Enhanced Debugging**: Detailed logging system with timestamps and channel tracking
+- **⚡ Fixed Call Origination**: Resolved critical bug preventing calls from starting
+- **🔄 Real-time Updates**: Live call status monitoring with WebSocket events
+
+### Core Features
 - **Real-time WebSocket Connection**: Persistent connection to Asterisk ARI with automatic reconnection
-- **Predictive Dialing**: Intelligent call pacing and queue management
+- **Predictive Dialing**: Intelligent call pacing and queue management with rate limiting
 - **Web-based Management**: Intuitive interface for campaign and lead management
 - **Advanced Analytics**: Real-time monitoring and comprehensive reporting
 - **Multi-campaign Support**: Run multiple campaigns simultaneously
@@ -13,6 +22,16 @@ Professional Asterisk ARI Auto-Dialer Application with real-time WebSocket integ
 - **Lead Management**: Import/export leads with advanced filtering
 - **Security**: Built-in authentication, session management, and SQL injection protection
 - **High Availability**: Auto-reconnection, error handling, and fault tolerance
+
+### Call Logging Features
+- **Date/Time Tracking**: Precise timestamps for call initiation and completion
+- **Phone Number Logging**: Track all dialed numbers with lead association
+- **Status Monitoring**: Real-time status updates (initiated → ringing → answered/failed)
+- **Duration Calculation**: Automatic call duration tracking for answered calls
+- **Channel ID Tracking**: Asterisk channel IDs for advanced debugging
+- **Agent Assignment**: Track which agent handled each call
+- **Campaign Association**: Link calls to specific campaigns for reporting
+- **Response Tracking**: Capture call dispositions (ANSWERED, BUSY, NO ANSWER, etc.)
 
 ## 📋 System Requirements
 
@@ -173,10 +192,60 @@ const MAX_CALLS_PER_MINUTE = 100;
 const DEFAULT_TIMEZONE = 'America/New_York';
 ```
 
+## 💻 Web Interface
+
+### New Call Logs Page
+Access the comprehensive call logging interface at `/index.php?page=call-logs`:
+
+- **Real-time Auto-refresh**: Updates every 10 seconds
+- **Advanced Filtering**: Filter by campaign, status, phone number, date range
+- **Statistics Cards**: Total calls, answered calls, failed calls, average duration
+- **Export Functionality**: Download call logs for reporting
+- **Status Color Coding**: Visual indicators for call status
+
+### Navigation Menu
+- **Dashboard**: Campaign overview and system status
+- **Campaigns**: Manage campaigns and leads
+- **Call Logs**: *(NEW)* Detailed call tracking and analytics
+- **CDR**: Call detail records
+- **Monitoring**: Real-time system monitoring
+
+## 🔌 API Endpoints
+
+### New Call Logs API
+- `GET /api/call-logs.php` - List call logs with filtering
+- `GET /api/call-logs.php?stats=1` - Get call statistics
+- `GET /api/call-logs.php?id={id}` - Get specific call details
+
+**Example API Usage:**
+```bash
+# Get recent call logs
+curl "http://localhost/ari-dialer/api/call-logs.php?limit=10"
+
+# Filter by campaign
+curl "http://localhost/ari-dialer/api/call-logs.php?campaign_id=8&status=answered"
+
+# Get statistics
+curl "http://localhost/ari-dialer/api/call-logs.php?stats=1"
+```
+
+### Existing Campaign API
+- `GET /api/campaigns.php` - List campaigns
+- `POST /api/campaigns.php` - Start/pause/stop campaigns
+- `PUT /api/campaigns.php` - Update campaign settings
+- `DELETE /api/campaigns.php` - Delete campaigns
+
 ## 🔍 Monitoring & Troubleshooting
+
+### Enhanced Logging System
+- **Application Logs**: `/logs/error.log` - Main application with detailed call traces
+- **ARI Service Logs**: `/logs/ari-service.log` - WebSocket service activity
+- **Apache Logs**: `/var/log/apache2/error.log` - Web server errors
+- **Asterisk Logs**: `/var/log/asterisk/full.log` - PBX activity
 
 ### Real-time Monitoring
 - **Dashboard**: Live campaign statistics and system health
+- **Call Logs Page**: Real-time call activity with auto-refresh
 - **Call Monitoring**: Active calls, queue status, agent performance
 - **System Logs**: Real-time log viewer with filtering
 

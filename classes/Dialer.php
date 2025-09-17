@@ -7,27 +7,43 @@ class Dialer {
     private $ari;
     private $campaign;
     private $db;
-    
+
     public function __construct() {
         $this->ari = new ARI();
         $this->campaign = new Campaign();
         $this->db = Database::getInstance()->getConnection();
     }
+
+    private function log($message, $level = 'INFO') {
+        $timestamp = date('Y-m-d H:i:s');
+        $logMessage = "[$timestamp] [$level] DIALER: $message" . PHP_EOL;
+        file_put_contents(__DIR__ . '/../logs/error.log', $logMessage, FILE_APPEND | LOCK_EX);
+        error_log($logMessage);
+    }
     
     public function startCampaign($campaignId) {
+        $this->log("Starting campaign ID: $campaignId");
+
         $campaignData = $this->campaign->getById($campaignId);
         if (!$campaignData) {
+            $this->log("Campaign ID $campaignId not found", 'ERROR');
             return ['success' => false, 'message' => 'Campaign not found'];
         }
-        
+
+        $this->log("Campaign found: " . $campaignData['name'] . " with status: " . $campaignData['status']);
+
         if ($campaignData['status'] !== 'paused') {
+            $this->log("Campaign is not in paused state (current: " . $campaignData['status'] . ")", 'ERROR');
             return ['success' => false, 'message' => 'Campaign is not in paused state'];
         }
-        
+
+        $this->log("Updating campaign status to active");
         $this->campaign->update($campaignId, array_merge($campaignData, ['status' => 'active']));
-        
+
+        $this->log("Processing campaign leads");
         $this->processCampaignLeads($campaignId);
-        
+
+        $this->log("Campaign started successfully");
         return ['success' => true, 'message' => 'Campaign started'];
     }
     
@@ -60,61 +76,112 @@ class Dialer {
     }
     
     public function processCampaignLeads($campaignId) {
+        $this->log("Processing leads for campaign ID: $campaignId");
+
         $campaignData = $this->campaign->getById($campaignId);
-        $leads = $this->campaign->getLeads($campaignId, 'pending', $campaignData['max_calls_per_minute']);
-        
-        foreach ($leads as $lead) {
-            $this->dialLead($campaignId, $lead);
-            
-            usleep(60000000 / $campaignData['max_calls_per_minute']);
+        if (!$campaignData) {
+            $this->log("Cannot get campaign data for ID: $campaignId", 'ERROR');
+            return;
         }
+
+        $maxCalls = $campaignData['max_calls_per_minute'];
+        $this->log("Max calls per minute: $maxCalls");
+
+        $leads = $this->campaign->getLeads([
+            'campaign_id' => $campaignId,
+            'status' => 'pending',
+            'limit' => $maxCalls
+        ]);
+        $leadCount = count($leads);
+        $this->log("Found $leadCount pending leads to dial");
+
+        if ($leadCount === 0) {
+            $this->log("No pending leads found for campaign $campaignId", 'WARN');
+            return;
+        }
+
+        foreach ($leads as $index => $lead) {
+            $this->log("Processing lead " . ($index + 1) . "/$leadCount: " . $lead['phone_number']);
+            $result = $this->dialLead($campaignId, $lead);
+
+            if ($result['success']) {
+                $this->log("Successfully initiated call to " . $lead['phone_number']);
+            } else {
+                $this->log("Failed to initiate call to " . $lead['phone_number'] . ": " . $result['message'], 'ERROR');
+            }
+
+            // Rate limiting
+            $sleepTime = 60000000 / $maxCalls; // microseconds
+            $this->log("Sleeping for " . round($sleepTime/1000000, 2) . " seconds (rate limiting)");
+            usleep($sleepTime);
+        }
+
+        $this->log("Finished processing $leadCount leads for campaign $campaignId");
     }
     
     public function dialLead($campaignId, $lead) {
         try {
+            $this->log("Dialing lead ID: " . $lead['id'] . ", phone: " . $lead['phone_number']);
+
             $campaignData = $this->campaign->getById($campaignId);
-            
-            // Use ARI POST /channels to create outbound call directly
-            // endpoint = Local/NUMBER@outbound_context for the outbound leg
+            if (!$campaignData) {
+                $this->log("Cannot get campaign data for lead dial", 'ERROR');
+                return ['success' => false, 'message' => 'Campaign data not found'];
+            }
+
             $outboundContext = $campaignData['outbound_context'] ?? 'from-internal';
             $endpoint = 'Local/' . $lead['phone_number'] . '@' . $outboundContext;
-            
+            $agentExtension = $campaignData['extension'] ?? '101';
+
+            $this->log("Dialing: endpoint=$endpoint, context=$outboundContext, agent=$agentExtension");
+
             $variables = [
                 'CAMPAIGN_ID' => $campaignId,
                 'LEAD_ID' => $lead['id'],
-                'AGENT_EXTENSION' => $campaignData['extension'],
+                'AGENT_EXTENSION' => $agentExtension,
                 'CAMPAIGN_NAME' => $campaignData['name']
             ];
-            
-            // Create the outbound call using ARI
-            $response = $this->ari->makeRequest('POST', '/channels', [
+
+            $requestData = [
                 'endpoint' => $endpoint,
                 'app' => Config::ARI_APP,
-                'appArgs' => $campaignData['extension'], // Agent extension as argument
-                'callerId' => $campaignData['extension'],
+                'appArgs' => $agentExtension,
+                'callerId' => $agentExtension,
                 'timeout' => 30,
                 'variables' => $variables
-            ]);
-            
+            ];
+
+            $this->log("ARI request data: " . json_encode($requestData));
+
+            // Create the outbound call using ARI
+            $response = $this->ari->makeRequest('POST', '/channels', $requestData);
+
+            $this->log("ARI response: " . json_encode($response));
+
             if ($response && isset($response['id'])) {
+                $this->log("Call originated successfully, channel ID: " . $response['id']);
+
                 $this->campaign->updateLeadStatus($lead['id'], 'dialed');
-                
+
                 $this->logCall([
                     'lead_id' => $lead['id'],
                     'campaign_id' => $campaignId,
                     'phone_number' => $lead['phone_number'],
-                    'agent_extension' => $campaignData['extension'],
+                    'agent_extension' => $agentExtension,
                     'channel_id' => $response['id'],
-                    'status' => 'initiated'
+                    'status' => 'initiated',
+                    'call_start' => date('Y-m-d H:i:s')
                 ]);
-                
+
                 return ['success' => true, 'channel_id' => $response['id']];
             } else {
+                $this->log("ARI originate failed - no channel ID in response", 'ERROR');
                 $this->campaign->updateLeadStatus($lead['id'], 'failed', 'originate_failed');
-                return ['success' => false, 'message' => 'Failed to originate call'];
+                return ['success' => false, 'message' => 'Failed to originate call - no channel ID'];
             }
-            
+
         } catch (Exception $e) {
+            $this->log("Exception in dialLead: " . $e->getMessage(), 'ERROR');
             $this->campaign->updateLeadStatus($lead['id'], 'failed', 'error', $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
@@ -325,9 +392,9 @@ class Dialer {
     }
     
     private function logCall($data) {
-        $sql = "INSERT INTO call_logs (lead_id, campaign_id, phone_number, agent_extension, channel_id, status) 
-                VALUES (:lead_id, :campaign_id, :phone_number, :agent_extension, :channel_id, :status)";
-        
+        $sql = "INSERT INTO call_logs (lead_id, campaign_id, phone_number, agent_extension, channel_id, status, call_start)
+                VALUES (:lead_id, :campaign_id, :phone_number, :agent_extension, :channel_id, :status, :call_start)";
+
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([
             ':lead_id' => $data['lead_id'],
@@ -335,7 +402,8 @@ class Dialer {
             ':phone_number' => $data['phone_number'],
             ':agent_extension' => $data['agent_extension'],
             ':channel_id' => $data['channel_id'],
-            ':status' => $data['status']
+            ':status' => $data['status'],
+            ':call_start' => $data['call_start'] ?? date('Y-m-d H:i:s')
         ]);
     }
     
