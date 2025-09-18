@@ -110,12 +110,31 @@ EXIT;
 
 ### Import Database Schema
 
+**Important Notes:**
+- The schema is compatible with MySQL 5.5+ and MariaDB 10.0+
+- The security tables must be imported AFTER the main schema due to foreign key dependencies
+- If you encounter TIMESTAMP column errors, your MySQL version may need the updated schema
+
 ```bash
-# Import main schema
+# Import main schema first (REQUIRED)
 mysql -u dialer_user -p asterisk_dialer < sql/schema.sql
 
-# Import security tables
+# Import security tables second (has foreign key dependencies)
 mysql -u dialer_user -p asterisk_dialer < sql/security_tables.sql
+```
+
+**Troubleshooting Database Installation:**
+```bash
+# If you get "Incorrect table definition; there can be only one TIMESTAMP" error:
+# This is fixed in the current version, but if using older schema files,
+# the updated schema converts some TIMESTAMP columns to DATETIME for compatibility
+
+# If you get "Can't create table" errno 150 (foreign key error):
+# Make sure you import schema.sql BEFORE security_tables.sql
+# The security tables depend on tables created in the main schema
+
+# Test database connection after import:
+mysql -u dialer_user -p asterisk_dialer -e "SHOW TABLES;"
 ```
 
 ## Step 4: Application Configuration
@@ -550,6 +569,30 @@ php -m | grep mysql
 7. **Calls not starting**: Check `logs/error.log` for "Found 0 pending leads" errors
 8. **Call logs not appearing**: Verify database permissions and call_logs table exists
 9. **Log files not writable**: Check permissions on `logs/` directory
+
+### Database Schema Issues
+
+**ERROR 1293 (HY000): Incorrect table definition; there can be only one TIMESTAMP**
+```bash
+# This occurs on older MySQL versions (< 5.6.5)
+# Solution: Use the updated schema.sql which converts some TIMESTAMP columns to DATETIME
+# If tables already exist, you can fix manually:
+mysql -u root -p asterisk_dialer -e "ALTER TABLE campaigns MODIFY updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;"
+mysql -u root -p asterisk_dialer -e "ALTER TABLE leads MODIFY updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;"
+mysql -u root -p asterisk_dialer -e "ALTER TABLE settings MODIFY updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;"
+```
+
+**ERROR 1005 (HY000): Can't create table (errno: 150)**
+```bash
+# This occurs when foreign key constraints fail
+# Solution: Import schema.sql BEFORE security_tables.sql
+# The security tables depend on tables created in the main schema
+# If you imported in wrong order, drop and recreate:
+mysql -u root -p asterisk_dialer -e "DROP DATABASE asterisk_dialer;"
+mysql -u root -p -e "CREATE DATABASE asterisk_dialer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p asterisk_dialer < sql/schema.sql
+mysql -u root -p asterisk_dialer < sql/security_tables.sql
+```
 
 ### WebSocket Service Issues
 
