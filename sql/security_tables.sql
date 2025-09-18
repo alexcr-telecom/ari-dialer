@@ -1,4 +1,5 @@
 -- Security-related tables for the Asterisk Auto-Dialer
+-- NOTE: Run this AFTER schema.sql as it references tables created there
 
 USE asterisk_dialer;
 
