@@ -146,8 +146,8 @@ class Dialer {
 
             $this->log("Making outbound call to: $endpoint for agent: $agentExtension");
 
-            // Create the outbound call using ARI originateCall method
-            $response = $this->ari->originateCall($endpoint, $agentExtension, $agentContext, 1, $variables);
+            // Create the outbound call using ARI originateCall method with dialed number as caller ID
+            $response = $this->ari->originateCall($endpoint, $agentExtension, $agentContext, 1, $variables, $lead['phone_number']);
 
             $this->log("ARI response: " . json_encode($response));
 
@@ -265,23 +265,37 @@ class Dialer {
     public function handleChannelEvent($event) {
         $channelId = $event['channel']['id'] ?? null;
         $eventType = $event['type'] ?? null;
-        
-        if (!$channelId) return;
-        
+
+        if (!$channelId) {
+            $this->log("No channel ID in event: " . json_encode($event), 'WARN');
+            return;
+        }
+
+        $this->log("Processing ARI event: $eventType for channel: $channelId");
+
         $callLog = $this->getCallLogByChannelId($channelId);
-        if (!$callLog) return;
-        
+        if (!$callLog) {
+            $this->log("No call log found for channel ID: $channelId, Event: $eventType", 'WARN');
+            return;
+        }
+
+        $this->log("Found call log ID: " . $callLog['id'] . " for channel: $channelId, Current status: " . $callLog['status']);
+
         switch ($eventType) {
             case 'ChannelStateChange':
                 $this->handleChannelStateChange($event, $callLog);
                 break;
-                
+
             case 'ChannelDestroyed':
                 $this->handleChannelDestroyed($event, $callLog);
                 break;
-                
+
             case 'ChannelDtmfReceived':
                 $this->handleDtmfReceived($event, $callLog);
+                break;
+
+            default:
+                $this->log("Unhandled event type: $eventType for channel: $channelId", 'DEBUG');
                 break;
         }
     }
@@ -290,37 +304,62 @@ class Dialer {
         $state = $event['channel']['state'] ?? null;
         $channelId = $event['channel']['id'];
         $channel = $event['channel'];
-        
+
+        // Update call log status based on ARI channel state events immediately
+        if ($callLog && $callLog['status'] === 'initiated') {
+            switch ($state) {
+                case 'Ring':
+                case 'Ringing':
+                    $this->updateCallLog($callLog['id'], ['status' => 'ringing']);
+                    $this->campaign->updateLeadStatus($callLog['lead_id'], 'ringing');
+                    $this->log("ARI Event: Call ringing - Lead ID: " . $callLog['lead_id'] . ", Channel: $channelId");
+                    break;
+                case 'Up':
+                    $this->updateCallLog($callLog['id'], ['status' => 'answered', 'call_start' => date('Y-m-d H:i:s')]);
+                    $this->campaign->updateLeadStatus($callLog['lead_id'], 'answered');
+                    $this->log("ARI Event: Call answered - Lead ID: " . $callLog['lead_id'] . ", Channel: $channelId");
+                    break;
+                case 'Busy':
+                    $this->updateCallLog($callLog['id'], ['status' => 'busy']);
+                    $this->campaign->updateLeadStatus($callLog['lead_id'], 'busy', 'BUSY');
+                    $this->log("ARI Event: Line busy - Lead ID: " . $callLog['lead_id'] . ", Channel: $channelId");
+                    break;
+                case 'Down':
+                    // Let handleChannelDestroyed handle final status with hangup cause
+                    break;
+            }
+        }
+
         switch ($state) {
             case 'Ringing':
-                if ($callLog) {
+                if ($callLog && $callLog['status'] !== 'ringing') {
                     $this->updateCallLog($callLog['id'], ['status' => 'ringing']);
                 }
                 break;
-                
+
             case 'Up':
                 // Call was answered
                 if ($callLog) {
-                    $this->updateCallLog($callLog['id'], [
-                        'status' => 'answered',
-                        'call_start' => date('Y-m-d H:i:s')
-                    ]);
-                    
+                    $updateData = ['status' => 'answered'];
+
+                    // Only set call_start if not already set
+                    if (empty($callLog['call_start'])) {
+                        $updateData['call_start'] = date('Y-m-d H:i:s');
+                    }
+
+                    $this->updateCallLog($callLog['id'], $updateData);
                     $this->campaign->updateLeadStatus($callLog['lead_id'], 'answered');
                 }
-                
+
                 // If this is an outbound call managed by our ARI app, connect to agent
                 if (isset($channel['channelvars']['AGENT_EXTENSION'])) {
                     $agentExtension = $channel['channelvars']['AGENT_EXTENSION'];
                     $agentContext = $channel['channelvars']['AGENT_CONTEXT'] ?? 'from-internal';
                     $this->connectToAgent($channelId, $agentExtension, $agentContext);
                 }
-                
-                if ($this->shouldRecord()) {
-                    $this->ari->startRecording($channelId);
-                }
+
                 break;
-                
+
             case 'Down':
                 if ($callLog) {
                     $this->handleCallEnd($callLog, 'hung_up');
@@ -331,34 +370,42 @@ class Dialer {
     
     private function handleChannelDestroyed($event, $callLog) {
         $hangupCause = $event['cause'] ?? null;
+        $hangupCauseText = $event['cause_txt'] ?? null;
+
+        // Use ARI hangup cause to determine final call status
+        $status = $this->getStatusFromHangupCause($hangupCause);
         $disposition = $this->getDispositionFromHangupCause($hangupCause);
-        
-        $this->handleCallEnd($callLog, 'hung_up', $disposition);
+
+        $this->log("Channel destroyed - Hangup cause: $hangupCause ($hangupCauseText), Status: $status, Disposition: $disposition");
+
+        $this->handleCallEnd($callLog, $status, $disposition);
     }
     
     private function handleCallEnd($callLog, $status, $disposition = null) {
         $callEnd = date('Y-m-d H:i:s');
         $duration = 0;
-        
+
+        // Calculate duration if call_start exists
         if ($callLog['call_start']) {
             $duration = strtotime($callEnd) - strtotime($callLog['call_start']);
         }
-        
+
+        $this->log("Ending call - Lead ID: " . $callLog['lead_id'] . ", Status: $status, Disposition: $disposition, Duration: {$duration}s");
+
+        // Update call log with final status from ARI hangup cause
         $this->updateCallLog($callLog['id'], [
             'status' => $status,
             'call_end' => $callEnd,
             'duration' => $duration,
             'disposition' => $disposition
         ]);
-        
+
+        // Update lead status based on ARI-determined call outcome
         if ($callLog['lead_id']) {
-            $leadStatus = $disposition === 'ANSWERED' ? 'answered' : 
-                         ($disposition === 'BUSY' ? 'busy' : 
-                         ($disposition === 'NO ANSWER' ? 'no_answer' : 'failed'));
-            
-            $this->campaign->updateLeadStatus($callLog['lead_id'], $leadStatus, $disposition);
-            
-            if ($leadStatus !== 'answered' && $this->shouldRetry($callLog['lead_id'])) {
+            $this->campaign->updateLeadStatus($callLog['lead_id'], $status, $disposition);
+
+            // Schedule retry for unsuccessful calls
+            if ($status !== 'answered' && $this->shouldRetry($callLog['lead_id'])) {
                 $this->scheduleRetry($callLog['lead_id']);
             }
         }
@@ -452,17 +499,45 @@ class Dialer {
         }
     }
     
+    private function getStatusFromHangupCause($cause) {
+        $statuses = [
+            16 => 'answered',       // Normal clearing - call was answered
+            17 => 'busy',           // User busy
+            18 => 'no_answer',      // No user responding
+            19 => 'no_answer',      // No answer from user
+            20 => 'no_answer',      // Subscriber absent
+            21 => 'failed',         // Call rejected
+            22 => 'failed',         // Number changed
+            27 => 'failed',         // Destination out of order
+            28 => 'failed',         // Invalid number format
+            34 => 'failed',         // No circuit/channel available
+            38 => 'failed',         // Network out of order
+            41 => 'failed',         // Temporary failure
+            42 => 'failed',         // Switching equipment congestion
+            44 => 'failed',         // Requested channel not available
+        ];
+
+        return $statuses[$cause] ?? 'failed';
+    }
+
     private function getDispositionFromHangupCause($cause) {
         $dispositions = [
             16 => 'ANSWERED',       // Normal clearing
             17 => 'BUSY',           // User busy
             18 => 'NO ANSWER',      // No user responding
             19 => 'NO ANSWER',      // No answer from user
+            20 => 'NO ANSWER',      // Subscriber absent
             21 => 'REJECTED',       // Call rejected
+            22 => 'INVALID',        // Number changed
             27 => 'UNREACHABLE',    // Destination out of order
+            28 => 'INVALID',        // Invalid number format
             34 => 'CONGESTION',     // No circuit/channel available
+            38 => 'UNREACHABLE',    // Network out of order
+            41 => 'FAILED',         // Temporary failure
+            42 => 'CONGESTION',     // Switching equipment congestion
+            44 => 'CONGESTION',     // Requested channel not available
         ];
-        
+
         return $dispositions[$cause] ?? 'FAILED';
     }
     

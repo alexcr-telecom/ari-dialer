@@ -14,7 +14,7 @@ class ARI {
         $this->app = Config::ARI_APP;
     }
     
-    public function originateCall($endpoint, $extension, $context = null, $priority = 1, $variables = []) {
+    public function originateCall($endpoint, $extension, $context = null, $priority = 1, $variables = [], $callerId = null) {
         $context = $context ?? Config::ASTERISK_CONTEXT;
 
         $data = [
@@ -24,6 +24,10 @@ class ARI {
             'priority' => $priority,
             'timeout' => 120
         ];
+
+        if ($callerId) {
+            $data['callerId'] = $callerId;
+        }
 
         if (!empty($variables)) {
             foreach ($variables as $key => $value) {
@@ -91,8 +95,8 @@ class ARI {
     }
     
     public function getWebSocketUrl() {
-        return 'ws://' . Config::ARI_HOST . ':' . Config::ARI_PORT . '/ari/events?api_key=' . 
-               $this->username . ':' . $this->password . '&app=' . $this->app;
+        return 'ws://' . Config::ARI_HOST . ':' . Config::ARI_PORT . '/ari/events?api_key=' .
+               $this->username . ':' . $this->password . '&app=' . $this->app . '&subscribeAll=true';
     }
     
     public function subscribeToEvents($eventSource = null) {
