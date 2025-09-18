@@ -35,7 +35,7 @@ CREATE TABLE campaigns (
     retry_attempts INT DEFAULT 3,
     retry_interval INT DEFAULT 300,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Leads table
@@ -51,7 +51,7 @@ CREATE TABLE leads (
     disposition VARCHAR(50),
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
     INDEX idx_campaign_status (campaign_id, status),
     INDEX idx_phone_number (phone_number)
@@ -127,7 +127,7 @@ CREATE TABLE settings (
     setting_key VARCHAR(100) UNIQUE NOT NULL,
     setting_value TEXT,
     description TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Insert default settings
