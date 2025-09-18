@@ -21,9 +21,9 @@ class CDR {
                     cdr.dstchannel,
                     cdr.lastapp,
                     cdr.lastdata,
-                    cdr.start,
-                    cdr.answer,
-                    cdr.end,
+                    cdr.calldate,
+                    '' as answer,
+                    '' as end,
                     cdr.duration,
                     cdr.billsec,
                     cdr.disposition,
@@ -39,12 +39,12 @@ class CDR {
         $params = [];
 
         if (!empty($filters['date_from'])) {
-            $sql .= " AND DATE(cdr.start) >= :date_from";
+            $sql .= " AND DATE(cdr.calldate) >= :date_from";
             $params[':date_from'] = $filters['date_from'];
         }
 
         if (!empty($filters['date_to'])) {
-            $sql .= " AND DATE(cdr.start) <= :date_to";
+            $sql .= " AND DATE(cdr.calldate) <= :date_to";
             $params[':date_to'] = $filters['date_to'];
         }
 
@@ -73,7 +73,7 @@ class CDR {
             $params[':max_duration'] = $filters['max_duration'];
         }
 
-        $sql .= " ORDER BY cdr.start DESC LIMIT :limit OFFSET :offset";
+        $sql .= " ORDER BY cdr.calldate DESC LIMIT :limit OFFSET :offset";
 
         $stmt = $this->cdrDb->prepare($sql);
 
@@ -134,7 +134,7 @@ class CDR {
             }
 
             // Format fields for display
-            $record['call_start'] = $record['start'];
+            $record['call_start'] = $record['calldate'];
             $record['call_end'] = $record['end'];
             $record['status'] = strtolower($record['disposition']);
             $record['recording_file'] = null; // CDR doesn't typically store recording file paths
@@ -149,12 +149,12 @@ class CDR {
         $params = [];
 
         if (!empty($filters['date_from'])) {
-            $sql .= " AND DATE(start) >= :date_from";
+            $sql .= " AND DATE(calldate) >= :date_from";
             $params[':date_from'] = $filters['date_from'];
         }
 
         if (!empty($filters['date_to'])) {
-            $sql .= " AND DATE(start) <= :date_to";
+            $sql .= " AND DATE(calldate) <= :date_to";
             $params[':date_to'] = $filters['date_to'];
         }
 
@@ -190,17 +190,17 @@ class CDR {
                     SUM(duration) as total_duration,
                     ROUND((COUNT(CASE WHEN disposition = 'ANSWERED' THEN 1 END) / COUNT(*)) * 100, 2) as answer_rate
                 FROM cdr
-                WHERE start IS NOT NULL";
+                WHERE calldate IS NOT NULL";
 
         $params = [];
 
         if (!empty($filters['date_from'])) {
-            $sql .= " AND DATE(start) >= :date_from";
+            $sql .= " AND DATE(calldate) >= :date_from";
             $params[':date_from'] = $filters['date_from'];
         }
 
         if (!empty($filters['date_to'])) {
-            $sql .= " AND DATE(start) <= :date_to";
+            $sql .= " AND DATE(calldate) <= :date_to";
             $params[':date_to'] = $filters['date_to'];
         }
 
@@ -234,7 +234,7 @@ class CDR {
                 $record['dstchannel'],
                 $record['lastapp'],
                 $record['lastdata'],
-                $record['start'],
+                $record['calldate'],
                 $record['answer'],
                 $record['end'],
                 $record['duration'],
@@ -279,25 +279,25 @@ class CDR {
 
     public function getCallsByHour($filters = []) {
         $sql = "SELECT
-                    HOUR(start) as hour,
+                    HOUR(calldate) as hour,
                     COUNT(*) as call_count,
                     COUNT(CASE WHEN disposition = 'ANSWERED' THEN 1 END) as answered_count
                 FROM cdr
-                WHERE start IS NOT NULL";
+                WHERE calldate IS NOT NULL";
 
         $params = [];
 
         if (!empty($filters['date_from'])) {
-            $sql .= " AND DATE(start) >= :date_from";
+            $sql .= " AND DATE(calldate) >= :date_from";
             $params[':date_from'] = $filters['date_from'];
         }
 
         if (!empty($filters['date_to'])) {
-            $sql .= " AND DATE(start) <= :date_to";
+            $sql .= " AND DATE(calldate) <= :date_to";
             $params[':date_to'] = $filters['date_to'];
         }
 
-        $sql .= " GROUP BY HOUR(start) ORDER BY hour";
+        $sql .= " GROUP BY HOUR(calldate) ORDER BY hour";
 
         $stmt = $this->cdrDb->prepare($sql);
         $stmt->execute($params);
@@ -306,16 +306,16 @@ class CDR {
 
     public function getCallsByDate($filters = [], $days = 7) {
         $sql = "SELECT
-                    DATE(start) as call_date,
+                    DATE(calldate) as call_date,
                     COUNT(*) as call_count,
                     COUNT(CASE WHEN disposition = 'ANSWERED' THEN 1 END) as answered_count
                 FROM cdr
-                WHERE start IS NOT NULL
-                AND start >= DATE_SUB(NOW(), INTERVAL :days DAY)";
+                WHERE calldate IS NOT NULL
+                AND calldate >= DATE_SUB(NOW(), INTERVAL :days DAY)";
 
         $params = [':days' => $days];
 
-        $sql .= " GROUP BY DATE(start) ORDER BY call_date";
+        $sql .= " GROUP BY DATE(calldate) ORDER BY call_date";
 
         $stmt = $this->cdrDb->prepare($sql);
         $stmt->execute($params);

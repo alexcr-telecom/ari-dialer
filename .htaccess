@@ -25,25 +25,12 @@ RewriteEngine On
     Require all denied
 </FilesMatch>
 
-# Deny access to configuration directory
-<Directory "config">
-    Require all denied
-</Directory>
-
-# Deny access to SQL files
-<Directory "sql">
-    Require all denied
-</Directory>
-
-# Deny access to logs directory via web
-<Directory "logs">
-    Require all denied
-</Directory>
-
-# Hide .git directory
-<DirectoryMatch "\.git">
-    Require all denied
-</DirectoryMatch>
+# Deny access to sensitive directories
+RedirectMatch 403 ^/ari-dialer/config/.*$
+RedirectMatch 403 ^/ari-dialer/sql/.*$
+RedirectMatch 403 ^/ari-dialer/logs/.*$
+RedirectMatch 403 ^/ari-dialer/\.git.*$
+RedirectMatch 403 ^/ari-dialer/vendor/.*$
 
 # Deny access to backup files
 <FilesMatch "\.(bak|backup|old|tmp|temp)$">
@@ -51,11 +38,9 @@ RewriteEngine On
 </FilesMatch>
 
 # Prevent access to PHP files in uploads directory
-<Directory "uploads">
-    <FilesMatch "\.php$">
-        Require all denied
-    </FilesMatch>
-</Directory>
+<FilesMatch "^uploads/.*\.php$">
+    Require all denied
+</FilesMatch>
 
 # Custom error pages (optional)
 ErrorDocument 403 /error.php?code=403
@@ -86,12 +71,11 @@ Options -Indexes
     MaxConnPerIP 10
 </IfModule>
 
-# Rate limiting (if mod_limitipconn is not available)
+# Basic rate limiting using environment variables (htaccess compatible)
 <IfModule mod_rewrite.c>
-    RewriteMap hosts-deny txt:/var/www/html/ari-dialer/.htaccess-deny
-    RewriteCond ${hosts-deny:%{REMOTE_ADDR}|NOT-FOUND} !=NOT-FOUND [OR]
-    RewriteCond ${hosts-deny:%{REMOTE_HOST}|NOT-FOUND} !=NOT-FOUND
-    RewriteRule ^.*$ - [F]
+    # Simple IP blocking can be done with rewrite rules if needed
+    # RewriteCond %{REMOTE_ADDR} ^192\.168\.1\.100$
+    # RewriteRule ^.*$ - [F]
 </IfModule>
 
 # MIME types

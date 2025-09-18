@@ -14,7 +14,7 @@ class CdrDatabase {
     private const CDR_PORT = '3306';
     private const CDR_DATABASE = 'asteriskcdrdb';
     private const CDR_USER = 'root';  // Change to freepbxuser if needed
-    private const CDR_PASSWORD = 'telecom2024';  // Change to appropriate password
+    private const CDR_PASSWORD = 'mahapharata';  // Updated to match current root password
 
     private function __construct() {
         $this->connect();

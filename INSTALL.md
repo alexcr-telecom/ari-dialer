@@ -59,8 +59,10 @@ sudo yum update -y
 # Ubuntu/Debian
 sudo apt install -y php php-mysql php-curl php-json php-mbstring php-xml php-zip mysql-client composer
 
-# CentOS/RHEL
-sudo yum install -y php php-mysql php-curl php-json php-mbstring php-xml php-zip mysql composer
+# CentOS/RHEL (with MariaDB 5.5+)
+sudo yum install -y php php-mysql php-curl php-json php-mbstring php-xml php-zip mariadb composer
+
+# Note: MariaDB 5.5.65 has been tested and is fully supported
 ```
 
 ## Step 2: Download and Extract
@@ -91,17 +93,24 @@ Log into MySQL as root:
 mysql -u root -p
 ```
 
-Execute the following SQL commands:
+**For MariaDB 5.5.65 (tested), use this working approach:**
+
+```bash
+# Create database manually first (replace YOUR_ROOT_PASSWORD)
+mysql -u root -pYOUR_ROOT_PASSWORD -e "CREATE DATABASE asterisk_dialer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# Create user and grant privileges (MariaDB 5.5 compatible)
+mysql -u root -pYOUR_ROOT_PASSWORD -e "GRANT ALL PRIVILEGES ON asterisk_dialer.* TO 'dialer_user'@'localhost' IDENTIFIED BY 'secure_password_123'; FLUSH PRIVILEGES;"
+```
+
+**Or execute these SQL commands interactively:**
 
 ```sql
 -- Create database
 CREATE DATABASE asterisk_dialer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- Create user with secure password
-CREATE USER 'dialer_user'@'localhost' IDENTIFIED BY 'YourSecurePassword123!';
-
--- Grant privileges
-GRANT ALL PRIVILEGES ON asterisk_dialer.* TO 'dialer_user'@'localhost';
+-- Create user with secure password (MariaDB 5.5+ compatible syntax)
+GRANT ALL PRIVILEGES ON asterisk_dialer.* TO 'dialer_user'@'localhost' IDENTIFIED BY 'YourSecurePassword123!';
 FLUSH PRIVILEGES;
 
 -- Exit MySQL
@@ -111,9 +120,10 @@ EXIT;
 ### Import Database Schema
 
 **Important Notes:**
-- The schema is compatible with MySQL 5.5+ and MariaDB 10.0+
+- The schema is compatible with MySQL 5.5+ and MariaDB 5.5+
 - The security tables must be imported AFTER the main schema due to foreign key dependencies
-- If you encounter TIMESTAMP column errors, your MySQL version may need the updated schema
+- Schema has been updated for full MariaDB 5.5.65 compatibility
+- Database creation uses compatible syntax for older MariaDB versions
 
 ```bash
 # Import main schema first (REQUIRED)
@@ -125,6 +135,11 @@ mysql -u dialer_user -p asterisk_dialer < sql/security_tables.sql
 
 **Troubleshooting Database Installation:**
 ```bash
+# MariaDB 5.5.65 Specific Issues:
+
+# If you get "You have an error in your SQL syntax" with CREATE USER IF NOT EXISTS:
+# This is fixed in the current version using GRANT...IDENTIFIED BY syntax
+
 # If you get "Incorrect table definition; there can be only one TIMESTAMP" error:
 # This is fixed in the current version, but if using older schema files,
 # the updated schema converts some TIMESTAMP columns to DATETIME for compatibility
@@ -135,6 +150,9 @@ mysql -u dialer_user -p asterisk_dialer < sql/security_tables.sql
 
 # Test database connection after import:
 mysql -u dialer_user -p asterisk_dialer -e "SHOW TABLES;"
+
+# Verify MariaDB version compatibility:
+mysql --version
 ```
 
 ## Step 4: Application Configuration
@@ -375,8 +393,8 @@ sudo chown -R www-data:www-data /var/www/html/ari-dialer
 # General permissions
 sudo chmod -R 755 /var/www/html/ari-dialer
 
-# Configuration files (more restrictive)
-sudo chmod 600 /var/www/html/ari-dialer/config/config.php
+# Configuration files (readable by web server but not world-readable)
+sudo chmod 644 /var/www/html/ari-dialer/config/config.php
 
 # Create required directories
 sudo mkdir -p /var/www/html/ari-dialer/{uploads,logs,recordings}

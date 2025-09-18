@@ -10,13 +10,16 @@
 -- - If you use FreePBX, DO NOT change Asterisk configuration files manually
 -- - FreePBX already has all necessary contexts and configurations
 -- - Use FreePBX web interface to configure ARI users and HTTP settings
+-- - MariaDB 5.5.65 compatible (removes IF NOT EXISTS for CREATE DATABASE)
 --
 -- Version History:
+-- v2.1.1: MariaDB 5.5 compatibility fixes for TIMESTAMP and CREATE statements
 -- v2.1: Added comprehensive call logging, enhanced debugging, fixed call origination
 -- v2.0: Added WebSocket stability improvements, ReactPHP integration
 -- v1.0: Initial release with basic dialing functionality
 
-CREATE DATABASE IF NOT EXISTS asterisk_dialer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- Note: CREATE DATABASE should be done manually for MariaDB 5.5
+-- CREATE DATABASE asterisk_dialer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE asterisk_dialer;
 
 -- Campaigns table
@@ -141,7 +144,7 @@ INSERT INTO settings (setting_key, setting_value, description) VALUES
 
 -- Insert default admin user (password: admin123)
 INSERT INTO agents (username, password, extension, name, role) VALUES
-('admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '100', 'System Administrator', 'admin');
+('admin', '$2y$10$96kFh0a3kwpuva4ih14eSuquvMyks1M5NAJyOBOim66qO8pt0u/5W', '100', 'System Administrator', 'admin');
 
 -- Create indexes for better performance
 CREATE INDEX idx_leads_next_attempt ON leads(next_attempt);
