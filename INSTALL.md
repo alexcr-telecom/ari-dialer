@@ -174,28 +174,99 @@ Update the configuration with your settings:
 ```php
 <?php
 class Config {
-    // Database Configuration
+    // Database Configuration (for dialer application)
     const DB_HOST = 'localhost';
     const DB_NAME = 'asterisk_dialer';
     const DB_USER = 'dialer_user';
     const DB_PASS = 'YourSecurePassword123!';
-    
+
+    // Asterisk Database Configuration (FreePBX Integration)
+    const ASTERISK_DB_HOST = 'localhost';
+    const ASTERISK_DB_NAME = 'asterisk';
+    const ASTERISK_DB_USER = 'freepbxuser';
+    const ASTERISK_DB_PASS = 'your_freepbx_password';
+
+    // CDR Database Configuration
+    const CDR_DB_HOST = 'localhost';
+    const CDR_DB_PORT = '3306';
+    const CDR_DB_NAME = 'asteriskcdrdb';
+    const CDR_DB_USER = 'root';
+    const CDR_DB_PASS = 'your_mysql_root_password';
+
     // Asterisk ARI Configuration
     const ARI_HOST = 'localhost';           # Asterisk server IP
     const ARI_PORT = 8088;                  # ARI HTTP port
     const ARI_USER = 'ari_user';            # ARI username
     const ARI_PASS = 'ari_secure_password'; # ARI password
     const ARI_APP = 'dialer_app';           # ARI application name
-    
+
     // Dialer Configuration
     const ASTERISK_CONTEXT = 'from-internal';  # Dialplan context
     const MAX_CALLS_PER_MINUTE = 100;          # Rate limiting
     const DEFAULT_TIMEZONE = 'America/New_York'; # Your timezone
-    
+
     // File Paths
     const UPLOAD_DIR = '/var/www/html/ari-dialer/uploads/';
     const LOG_DIR = '/var/www/html/ari-dialer/logs/';
 }
+```
+
+### FreePBX Integration Setup
+
+**⚠️ NEW FEATURE**: The dialer now integrates directly with FreePBX to provide:
+- **IVR Selection**: Choose from existing IVRs in campaign configuration
+- **Queue Selection**: Select from configured queues
+- **Extension Selection**: Pick from registered extensions
+- **Database Status Monitoring**: Real-time connection status on dashboard
+
+#### Get FreePBX Database Credentials
+
+To enable FreePBX integration, you need the database credentials from your FreePBX installation:
+
+```bash
+# View FreePBX database configuration
+sudo cat /etc/freepbx.conf
+
+# Look for these values:
+# $amp_conf["AMPDBUSER"] = "freepbxuser";
+# $amp_conf["AMPDBPASS"] = "your_password";
+# $amp_conf["AMPDBHOST"] = "localhost";
+# $amp_conf["AMPDBNAME"] = "asterisk";
+```
+
+#### Update Database Schema for New Features
+
+Add the new destination type fields to your campaigns table:
+
+```bash
+mysql -u root -p asterisk_dialer -e "
+ALTER TABLE campaigns
+ADD COLUMN destination_type ENUM('custom', 'ivr', 'queue', 'extension') DEFAULT 'custom' AFTER extension,
+ADD COLUMN ivr_id INT(11) NULL AFTER destination_type,
+ADD COLUMN queue_extension VARCHAR(20) NULL AFTER ivr_id,
+ADD COLUMN agent_extension VARCHAR(20) NULL AFTER queue_extension;
+"
+```
+
+#### Test FreePBX Integration
+
+After configuration, test the integration:
+
+```bash
+# Test Asterisk database connection
+mysql -u freepbxuser -p asterisk -e "SELECT COUNT(*) FROM users;"
+
+# Test CDR database connection
+mysql -u root -p asteriskcdrdb -e "SELECT COUNT(*) FROM cdr;"
+
+# View available IVRs
+mysql -u freepbxuser -p asterisk -e "SELECT id, name, description FROM ivr_details;"
+
+# View available queues
+mysql -u freepbxuser -p asterisk -e "SELECT extension, descr FROM queues_config;"
+
+# View available extensions
+mysql -u freepbxuser -p asterisk -e "SELECT extension, name FROM users WHERE extension IS NOT NULL;"
 ```
 
 ## Step 5: Asterisk Configuration
@@ -539,10 +610,20 @@ tail -f /var/www/html/ari-dialer/logs/ari-service.log
 
 ### Test the System
 
-1. Go to **Monitoring**
-2. Click **Connect** to start monitoring
-3. **Start** your test campaign
-4. Verify calls are being initiated
+1. Go to **Dashboard** and verify:
+   - **Asterisk ARI Status**: Should show "Connected"
+   - **Database Status**: Both Asterisk and CDR should show "OK"
+   - **System Time**: Should display current server time
+2. Go to **Campaigns** → **New Campaign**
+3. Test the new destination options:
+   - **IVR**: Select from dropdown of configured IVRs
+   - **Queue**: Select from dropdown of configured queues
+   - **Extension**: Select from dropdown of registered extensions
+   - **Custom**: Manual context and extension entry
+4. Go to **Monitoring**
+5. Click **Connect** to start monitoring
+6. **Start** your test campaign
+7. Verify calls are being initiated
 
 ## Troubleshooting
 
@@ -587,6 +668,67 @@ php -m | grep mysql
 7. **Calls not starting**: Check `logs/error.log` for "Found 0 pending leads" errors
 8. **Call logs not appearing**: Verify database permissions and call_logs table exists
 9. **Log files not writable**: Check permissions on `logs/` directory
+
+### FreePBX Integration Issues
+
+**Dashboard shows "Asterisk database connection failed"**
+```bash
+# Check FreePBX database credentials
+sudo cat /etc/freepbx.conf | grep AMP
+
+# Test connection manually
+mysql -u freepbxuser -p asterisk -e "SELECT 1;"
+
+# Update config.php with correct credentials
+nano config/config.php
+```
+
+**Dashboard shows "CDR database connection failed"**
+```bash
+# Check if asteriskcdrdb database exists
+mysql -u root -p -e "SHOW DATABASES;" | grep cdr
+
+# Create CDR database if it doesn't exist
+mysql -u root -p -e "CREATE DATABASE asteriskcdrdb;"
+
+# Test CDR connection
+mysql -u root -p asteriskcdrdb -e "SHOW TABLES;"
+```
+
+**IVR/Queue/Extension dropdowns are empty**
+```bash
+# Check if data exists in FreePBX
+mysql -u freepbxuser -p asterisk -e "SELECT COUNT(*) FROM ivr_details;"
+mysql -u freepbxuser -p asterisk -e "SELECT COUNT(*) FROM queues_config;"
+mysql -u freepbxuser -p asterisk -e "SELECT COUNT(*) FROM users WHERE extension IS NOT NULL;"
+
+# If no data, configure IVRs/Queues in FreePBX web interface first
+```
+
+**Campaign destinations not saving properly**
+```bash
+# Check if new columns exist in campaigns table
+mysql -u root -p asterisk_dialer -e "DESCRIBE campaigns;" | grep destination_type
+
+# If columns missing, run the ALTER TABLE command from Step 4
+mysql -u root -p asterisk_dialer -e "
+ALTER TABLE campaigns
+ADD COLUMN destination_type ENUM('custom', 'ivr', 'queue', 'extension') DEFAULT 'custom' AFTER extension,
+ADD COLUMN ivr_id INT(11) NULL AFTER destination_type,
+ADD COLUMN queue_extension VARCHAR(20) NULL AFTER ivr_id,
+ADD COLUMN agent_extension VARCHAR(20) NULL AFTER queue_extension;
+"
+```
+
+**JavaScript error in campaign form**
+```bash
+# Check browser console for errors
+# Common error: "Cannot read properties of null (reading 'value')"
+# This is fixed in the updated code - ensure you have the latest version
+
+# Check file permissions
+chmod 644 /var/www/html/ari-dialer/pages/campaigns.php
+```
 
 ### Database Schema Issues
 

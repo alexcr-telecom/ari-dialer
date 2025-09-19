@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/../classes/Campaign.php';
+require_once __DIR__ . '/../classes/AsteriskDB.php';
 
 $campaign = new Campaign();
+$asteriskDB = AsteriskDB::getInstance();
 $action = $_GET['action'] ?? 'list';
 $campaignId = $_GET['id'] ?? null;
 
@@ -193,22 +195,8 @@ if ($action === 'delete' && $campaignId) {
                         <div class="row">
                             <div class="col-md-4">
                                 <div class="mb-3">
-                                    <label for="context" class="form-label">Context</label>
-                                    <input type="text" class="form-control" name="context" id="context" 
-                                           value="<?php echo htmlspecialchars($campaignData['context'] ?? Config::ASTERISK_CONTEXT); ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="extension" class="form-label">Extension</label>
-                                    <input type="text" class="form-control" name="extension" id="extension" 
-                                           value="<?php echo htmlspecialchars($campaignData['extension'] ?? '101'); ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
                                     <label for="priority" class="form-label">Priority</label>
-                                    <input type="number" class="form-control" name="priority" id="priority" 
+                                    <input type="number" class="form-control" name="priority" id="priority"
                                            value="<?php echo $campaignData['priority'] ?? 1; ?>">
                                 </div>
                             </div>
@@ -218,10 +206,112 @@ if ($action === 'delete' && $campaignId) {
                             <div class="col-md-12">
                                 <div class="mb-3">
                                     <label for="outbound_context" class="form-label">Outbound Context</label>
-                                    <input type="text" class="form-control" name="outbound_context" id="outbound_context" 
+                                    <input type="text" class="form-control" name="outbound_context" id="outbound_context"
                                            value="<?php echo htmlspecialchars($campaignData['outbound_context'] ?? 'from-internal'); ?>"
                                            placeholder="from-internal">
                                     <div class="form-text">Context for outbound calls (LOCAL/$NUMBER@context)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Agent Destination Configuration -->
+                        <div class="card border-light mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">Agent Destination</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <div class="mb-3">
+                                            <label for="destination_type" class="form-label">Destination Type</label>
+                                            <select class="form-select" name="destination_type" id="destination_type" onchange="toggleDestinationFields()">
+                                                <option value="custom" <?php echo ($campaignData['destination_type'] ?? 'custom') === 'custom' ? 'selected' : ''; ?>>Custom</option>
+                                                <option value="ivr" <?php echo ($campaignData['destination_type'] ?? '') === 'ivr' ? 'selected' : ''; ?>>IVR</option>
+                                                <option value="queue" <?php echo ($campaignData['destination_type'] ?? '') === 'queue' ? 'selected' : ''; ?>>Queue</option>
+                                                <option value="extension" <?php echo ($campaignData['destination_type'] ?? '') === 'extension' ? 'selected' : ''; ?>>Extension</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- IVR Selector -->
+                                    <div class="col-md-3" id="ivr_selector" style="display: none;">
+                                        <div class="mb-3">
+                                            <label for="ivr_id" class="form-label">Select IVR</label>
+                                            <select class="form-select" name="ivr_id" id="ivr_id">
+                                                <option value="">-- Select IVR --</option>
+                                                <?php
+                                                $ivrs = $asteriskDB->getIVRs();
+                                                foreach ($ivrs as $ivr): ?>
+                                                    <option value="<?php echo $ivr['id']; ?>" <?php echo ($campaignData['ivr_id'] ?? '') == $ivr['id'] ? 'selected' : ''; ?>>
+                                                        <?php echo htmlspecialchars($ivr['name'] ?: "IVR {$ivr['id']}"); ?>
+                                                        <?php if ($ivr['description']): ?>
+                                                            - <?php echo htmlspecialchars($ivr['description']); ?>
+                                                        <?php endif; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Queue Selector -->
+                                    <div class="col-md-3" id="queue_selector" style="display: none;">
+                                        <div class="mb-3">
+                                            <label for="queue_extension" class="form-label">Select Queue</label>
+                                            <select class="form-select" name="queue_extension" id="queue_extension">
+                                                <option value="">-- Select Queue --</option>
+                                                <?php
+                                                $queues = $asteriskDB->getQueues();
+                                                foreach ($queues as $queue): ?>
+                                                    <option value="<?php echo $queue['extension']; ?>" <?php echo ($campaignData['queue_extension'] ?? '') == $queue['extension'] ? 'selected' : ''; ?>>
+                                                        <?php echo $queue['extension']; ?>
+                                                        <?php if ($queue['description']): ?>
+                                                            - <?php echo htmlspecialchars($queue['description']); ?>
+                                                        <?php endif; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Extension Selector -->
+                                    <div class="col-md-3" id="extension_selector" style="display: none;">
+                                        <div class="mb-3">
+                                            <label for="agent_extension" class="form-label">Select Extension</label>
+                                            <select class="form-select" name="agent_extension" id="agent_extension">
+                                                <option value="">-- Select Extension --</option>
+                                                <?php
+                                                $extensions = $asteriskDB->getExtensions();
+                                                foreach ($extensions as $ext): ?>
+                                                    <option value="<?php echo $ext['extension']; ?>" <?php echo ($campaignData['agent_extension'] ?? '') == $ext['extension'] ? 'selected' : ''; ?>>
+                                                        <?php echo $ext['extension']; ?>
+                                                        <?php if ($ext['name']): ?>
+                                                            - <?php echo htmlspecialchars($ext['name']); ?>
+                                                        <?php endif; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Custom Fields -->
+                                    <div class="col-md-9" id="custom_selector">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="context" class="form-label">Context</label>
+                                                    <input type="text" class="form-control" name="context" id="context"
+                                                           value="<?php echo htmlspecialchars($campaignData['context'] ?? Config::ASTERISK_CONTEXT); ?>">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="extension" class="form-label">Extension</label>
+                                                    <input type="text" class="form-control" name="extension" id="extension"
+                                                           value="<?php echo htmlspecialchars($campaignData['extension'] ?? '101'); ?>">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -457,4 +547,47 @@ function deleteCampaign(id) {
         window.location.href = `?page=campaigns&action=delete&id=${id}`;
     }
 }
+
+function toggleDestinationFields() {
+    const destinationTypeElement = document.getElementById('destination_type');
+    if (!destinationTypeElement) {
+        return; // Element doesn't exist, probably not on the create/edit page
+    }
+
+    const destinationType = destinationTypeElement.value;
+
+    // Get all selector elements
+    const selectors = {
+        ivr_selector: document.getElementById('ivr_selector'),
+        queue_selector: document.getElementById('queue_selector'),
+        extension_selector: document.getElementById('extension_selector'),
+        custom_selector: document.getElementById('custom_selector')
+    };
+
+    // Hide all selectors (check if they exist first)
+    Object.values(selectors).forEach(element => {
+        if (element) {
+            element.style.display = 'none';
+        }
+    });
+
+    // Show the appropriate selector
+    if (destinationType === 'ivr' && selectors.ivr_selector) {
+        selectors.ivr_selector.style.display = 'block';
+    } else if (destinationType === 'queue' && selectors.queue_selector) {
+        selectors.queue_selector.style.display = 'block';
+    } else if (destinationType === 'extension' && selectors.extension_selector) {
+        selectors.extension_selector.style.display = 'block';
+    } else if (destinationType === 'custom' && selectors.custom_selector) {
+        selectors.custom_selector.style.display = 'block';
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Only run if we're on a page that has the destination_type element
+    if (document.getElementById('destination_type')) {
+        toggleDestinationFields();
+    }
+});
 </script>

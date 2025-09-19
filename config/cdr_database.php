@@ -4,17 +4,11 @@
  * Configuration for connecting to asteriskcdrdb database
  */
 
+require_once __DIR__ . '/config.php';
+
 class CdrDatabase {
     private static $instance = null;
     private $connection = null;
-
-    // CDR Database Configuration
-    // These should match your FreePBX/Asterisk CDR database settings
-    private const CDR_HOST = 'localhost';
-    private const CDR_PORT = '3306';
-    private const CDR_DATABASE = 'asteriskcdrdb';
-    private const CDR_USER = 'root';  // Change to freepbxuser if needed
-    private const CDR_PASSWORD = 'mahapharata';  // Updated to match current root password
 
     private function __construct() {
         $this->connect();
@@ -29,10 +23,7 @@ class CdrDatabase {
 
     private function connect() {
         try {
-            $dsn = "mysql:host=" . self::CDR_HOST .
-                   ";port=" . self::CDR_PORT .
-                   ";dbname=" . self::CDR_DATABASE .
-                   ";charset=utf8mb4";
+            $dsn = Config::getCdrDSN();
 
             $options = [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -41,7 +32,7 @@ class CdrDatabase {
                 PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
             ];
 
-            $this->connection = new PDO($dsn, self::CDR_USER, self::CDR_PASSWORD, $options);
+            $this->connection = new PDO($dsn, Config::CDR_DB_USER, Config::CDR_DB_PASS, $options);
 
         } catch (PDOException $e) {
             error_log("CDR Database connection failed: " . $e->getMessage());

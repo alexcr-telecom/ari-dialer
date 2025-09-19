@@ -9,9 +9,12 @@ class Campaign {
     }
     
     public function create($data) {
-        $sql = "INSERT INTO campaigns (name, description, status, start_date, end_date, context, outbound_context, extension, priority, max_calls_per_minute, retry_attempts, retry_interval) 
-                VALUES (:name, :description, :status, :start_date, :end_date, :context, :outbound_context, :extension, :priority, :max_calls_per_minute, :retry_attempts, :retry_interval)";
-        
+        // Process destination data based on type
+        $processedData = $this->processDestinationData($data);
+
+        $sql = "INSERT INTO campaigns (name, description, status, start_date, end_date, context, outbound_context, extension, destination_type, ivr_id, queue_extension, agent_extension, priority, max_calls_per_minute, retry_attempts, retry_interval)
+                VALUES (:name, :description, :status, :start_date, :end_date, :context, :outbound_context, :extension, :destination_type, :ivr_id, :queue_extension, :agent_extension, :priority, :max_calls_per_minute, :retry_attempts, :retry_interval)";
+
         $stmt = $this->db->prepare($sql);
         $result = $stmt->execute([
             ':name' => $data['name'],
@@ -19,15 +22,19 @@ class Campaign {
             ':status' => $data['status'] ?? 'paused',
             ':start_date' => $data['start_date'] ?? null,
             ':end_date' => $data['end_date'] ?? null,
-            ':context' => $data['context'] ?? 'from-internal',
+            ':context' => $processedData['context'],
             ':outbound_context' => $data['outbound_context'] ?? 'from-internal',
-            ':extension' => $data['agent_extension'] ?? $data['extension'] ?? '101',
+            ':extension' => $processedData['extension'],
+            ':destination_type' => $processedData['destination_type'],
+            ':ivr_id' => $processedData['ivr_id'],
+            ':queue_extension' => $processedData['queue_extension'],
+            ':agent_extension' => $processedData['agent_extension'],
             ':priority' => $data['priority'] ?? 1,
             ':max_calls_per_minute' => $data['max_calls_per_minute'] ?? 10,
             ':retry_attempts' => $data['retry_attempts'] ?? 3,
             ':retry_interval' => $data['retry_interval'] ?? 300
         ]);
-        
+
         if ($result) {
             return $this->db->lastInsertId();
         }
@@ -70,21 +77,28 @@ class Campaign {
     }
     
     public function update($id, $data) {
-        $sql = "UPDATE campaigns SET 
-                name = :name, 
-                description = :description, 
-                status = :status, 
-                start_date = :start_date, 
-                end_date = :end_date, 
-                context = :context, 
+        // Process destination data based on type
+        $processedData = $this->processDestinationData($data);
+
+        $sql = "UPDATE campaigns SET
+                name = :name,
+                description = :description,
+                status = :status,
+                start_date = :start_date,
+                end_date = :end_date,
+                context = :context,
                 outbound_context = :outbound_context,
-                extension = :extension, 
-                priority = :priority, 
-                max_calls_per_minute = :max_calls_per_minute, 
-                retry_attempts = :retry_attempts, 
+                extension = :extension,
+                destination_type = :destination_type,
+                ivr_id = :ivr_id,
+                queue_extension = :queue_extension,
+                agent_extension = :agent_extension,
+                priority = :priority,
+                max_calls_per_minute = :max_calls_per_minute,
+                retry_attempts = :retry_attempts,
                 retry_interval = :retry_interval
                 WHERE id = :id";
-        
+
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([
             ':id' => $id,
@@ -93,9 +107,13 @@ class Campaign {
             ':status' => $data['status'],
             ':start_date' => $data['start_date'] ?? null,
             ':end_date' => $data['end_date'] ?? null,
-            ':context' => $data['context'],
+            ':context' => $processedData['context'],
             ':outbound_context' => $data['outbound_context'],
-            ':extension' => $data['extension'],
+            ':extension' => $processedData['extension'],
+            ':destination_type' => $processedData['destination_type'],
+            ':ivr_id' => $processedData['ivr_id'],
+            ':queue_extension' => $processedData['queue_extension'],
+            ':agent_extension' => $processedData['agent_extension'],
             ':priority' => $data['priority'],
             ':max_calls_per_minute' => $data['max_calls_per_minute'],
             ':retry_attempts' => $data['retry_attempts'],
@@ -335,5 +353,57 @@ class Campaign {
             error_log("Bulk import error: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Process destination data based on destination type
+     * @param array $data
+     * @return array
+     */
+    private function processDestinationData($data) {
+        $destinationType = $data['destination_type'] ?? 'custom';
+        $result = [
+            'destination_type' => $destinationType,
+            'ivr_id' => null,
+            'queue_extension' => null,
+            'agent_extension' => null,
+            'context' => $data['context'] ?? 'from-internal',
+            'extension' => $data['extension'] ?? '101'
+        ];
+
+        switch ($destinationType) {
+            case 'ivr':
+                $result['ivr_id'] = !empty($data['ivr_id']) ? $data['ivr_id'] : null;
+                if ($result['ivr_id']) {
+                    $result['context'] = "ivr-{$result['ivr_id']}";
+                    $result['extension'] = 's'; // IVRs typically start with 's' extension
+                }
+                break;
+
+            case 'queue':
+                $result['queue_extension'] = !empty($data['queue_extension']) ? $data['queue_extension'] : null;
+                if ($result['queue_extension']) {
+                    $result['context'] = 'ext-queues';
+                    $result['extension'] = $result['queue_extension'];
+                }
+                break;
+
+            case 'extension':
+                $result['agent_extension'] = !empty($data['agent_extension']) ? $data['agent_extension'] : null;
+                if ($result['agent_extension']) {
+                    $result['context'] = 'from-internal';
+                    $result['extension'] = $result['agent_extension'];
+                }
+                break;
+
+            case 'custom':
+            default:
+                // Use the provided context and extension values
+                $result['context'] = $data['context'] ?? 'from-internal';
+                $result['extension'] = $data['extension'] ?? '101';
+                break;
+        }
+
+        return $result;
     }
 }

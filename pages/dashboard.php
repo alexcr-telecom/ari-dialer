@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../classes/Campaign.php';
 require_once __DIR__ . '/../classes/CDR.php';
 require_once __DIR__ . '/../classes/ARI.php';
+require_once __DIR__ . '/../config/config.php';
 
 $campaign = new Campaign();
 $cdr = new CDR();
@@ -17,6 +18,7 @@ $dashboardStats = [
 ];
 
 $ariConnection = $ari->testConnection();
+$databaseStatus = Config::getDatabaseStatus();
 ?>
 
 <div class="row mb-4">
@@ -27,7 +29,7 @@ $ariConnection = $ari->testConnection();
 
 <!-- System Status -->
 <div class="row mb-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-<?php echo $ariConnection['success'] ? 'success' : 'danger'; ?>">
             <div class="card-body">
                 <div class="d-flex align-items-center">
@@ -49,7 +51,32 @@ $ariConnection = $ari->testConnection();
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
+        <div class="card border-<?php echo ($databaseStatus['asterisk']['status'] == 'success' && $databaseStatus['cdr']['status'] == 'success') ? 'success' : 'danger'; ?>">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <i class="fas fa-database fa-2x text-<?php echo ($databaseStatus['asterisk']['status'] == 'success' && $databaseStatus['cdr']['status'] == 'success') ? 'success' : 'danger'; ?>"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">Database Status</h6>
+                        <p class="mb-0">
+                            <small class="text-<?php echo $databaseStatus['asterisk']['status'] == 'success' ? 'success' : 'danger'; ?>">
+                                Asterisk: <?php echo $databaseStatus['asterisk']['status'] == 'success' ? 'OK' : 'Failed'; ?>
+                            </small><br>
+                            <small class="text-<?php echo $databaseStatus['cdr']['status'] == 'success' ? 'success' : 'danger'; ?>">
+                                CDR: <?php echo $databaseStatus['cdr']['status'] == 'success' ? 'OK' : 'Failed'; ?>
+                            </small>
+                        </p>
+                        <?php if ($databaseStatus['asterisk']['status'] != 'success' || $databaseStatus['cdr']['status'] != 'success'): ?>
+                            <small class="text-danger">Check database configuration</small>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center">

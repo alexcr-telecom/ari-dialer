@@ -75,13 +75,20 @@ class CDR {
 
         $sql .= " ORDER BY cdr.calldate DESC LIMIT :limit OFFSET :offset";
 
+        // Add limit and offset to params
+        $params[':limit'] = $limit;
+        $params[':offset'] = $offset;
+
         $stmt = $this->cdrDb->prepare($sql);
 
+        // Bind all parameters at once
         foreach ($params as $key => $value) {
-            $stmt->bindValue($key, $value);
+            if ($key === ':limit' || $key === ':offset') {
+                $stmt->bindValue($key, (int)$value, PDO::PARAM_INT);
+            } else {
+                $stmt->bindValue($key, $value);
+            }
         }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 
         $stmt->execute();
         $records = $stmt->fetchAll();
