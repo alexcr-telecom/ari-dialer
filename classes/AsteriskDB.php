@@ -9,9 +9,10 @@ require_once __DIR__ . '/../config/config.php';
 class AsteriskDB {
     private static $instance = null;
     private $connection = null;
+    private $available = null;
 
     private function __construct() {
-        $this->connect();
+        // Don't auto-connect, check availability first
     }
 
     public static function getInstance() {
@@ -21,7 +22,38 @@ class AsteriskDB {
         return self::$instance;
     }
 
+    /**
+     * Check if Asterisk database is available and configured
+     */
+    public function isAvailable() {
+        if ($this->available !== null) {
+            return $this->available;
+        }
+
+        // Check if Asterisk database configuration exists
+        if (!defined('Config::ASTERISK_DB_HOST') ||
+            !Config::ASTERISK_DB_HOST ||
+            !Config::ASTERISK_DB_NAME ||
+            !Config::ASTERISK_DB_USER) {
+            error_log("Asterisk/FreePBX Database not configured - running in standalone mode");
+            $this->available = false;
+            return false;
+        }
+
+        // Test connection
+        $this->available = $this->testConnection();
+        if (!$this->available) {
+            error_log("Asterisk/FreePBX Database not available - running in standalone mode");
+        }
+
+        return $this->available;
+    }
+
     private function connect() {
+        if (!$this->isAvailable()) {
+            throw new Exception("Asterisk Database not available");
+        }
+
         try {
             $dsn = Config::getAsteriskDSN();
             $options = [
@@ -35,11 +67,16 @@ class AsteriskDB {
 
         } catch (PDOException $e) {
             error_log("Asterisk Database connection failed: " . $e->getMessage());
+            $this->available = false;
             throw new Exception("Asterisk Database connection failed");
         }
     }
 
     public function getConnection() {
+        if (!$this->isAvailable()) {
+            return null;
+        }
+
         if ($this->connection === null) {
             $this->connect();
         }
@@ -48,7 +85,13 @@ class AsteriskDB {
 
     public function testConnection() {
         try {
-            $this->getConnection()->query("SELECT 1");
+            // Don't use getConnection() here to avoid recursion
+            $dsn = Config::getAsteriskDSN();
+            $pdo = new PDO($dsn, Config::ASTERISK_DB_USER, Config::ASTERISK_DB_PASS, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => 5 // 5 second timeout
+            ]);
+            $pdo->query("SELECT 1");
             return true;
         } catch (Exception $e) {
             error_log("Asterisk Database test failed: " . $e->getMessage());
@@ -61,8 +104,15 @@ class AsteriskDB {
      * @return array
      */
     public function getIVRs() {
+        if (!$this->isAvailable()) {
+            return [];
+        }
+
         try {
-            $stmt = $this->getConnection()->prepare("
+            $conn = $this->getConnection();
+            if (!$conn) return [];
+
+            $stmt = $conn->prepare("
                 SELECT id, name, description
                 FROM ivr_details
                 ORDER BY name ASC
@@ -80,8 +130,15 @@ class AsteriskDB {
      * @return array
      */
     public function getQueues() {
+        if (!$this->isAvailable()) {
+            return [];
+        }
+
         try {
-            $stmt = $this->getConnection()->prepare("
+            $conn = $this->getConnection();
+            if (!$conn) return [];
+
+            $stmt = $conn->prepare("
                 SELECT extension, descr as description, maxwait
                 FROM queues_config
                 ORDER BY extension ASC
@@ -99,8 +156,15 @@ class AsteriskDB {
      * @return array
      */
     public function getExtensions() {
+        if (!$this->isAvailable()) {
+            return [];
+        }
+
         try {
-            $stmt = $this->getConnection()->prepare("
+            $conn = $this->getConnection();
+            if (!$conn) return [];
+
+            $stmt = $conn->prepare("
                 SELECT extension, name, sipname
                 FROM users
                 WHERE extension IS NOT NULL AND extension != ''
@@ -119,8 +183,15 @@ class AsteriskDB {
      * @return array
      */
     public function getCustomExtensions() {
+        if (!$this->isAvailable()) {
+            return [];
+        }
+
         try {
-            $stmt = $this->getConnection()->prepare("
+            $conn = $this->getConnection();
+            if (!$conn) return [];
+
+            $stmt = $conn->prepare("
                 SELECT custom_exten as extension, description
                 FROM custom_extensions
                 ORDER BY custom_exten ASC
@@ -139,8 +210,15 @@ class AsteriskDB {
      * @return array|null
      */
     public function getIVRById($ivrId) {
+        if (!$this->isAvailable()) {
+            return null;
+        }
+
         try {
-            $stmt = $this->getConnection()->prepare("
+            $conn = $this->getConnection();
+            if (!$conn) return null;
+
+            $stmt = $conn->prepare("
                 SELECT * FROM ivr_details WHERE id = ?
             ");
             $stmt->execute([$ivrId]);
@@ -157,8 +235,15 @@ class AsteriskDB {
      * @return array|null
      */
     public function getQueueByExtension($extension) {
+        if (!$this->isAvailable()) {
+            return null;
+        }
+
         try {
-            $stmt = $this->getConnection()->prepare("
+            $conn = $this->getConnection();
+            if (!$conn) return null;
+
+            $stmt = $conn->prepare("
                 SELECT * FROM queues_config WHERE extension = ?
             ");
             $stmt->execute([$extension]);
@@ -175,8 +260,15 @@ class AsteriskDB {
      * @return array|null
      */
     public function getExtensionByNumber($extension) {
+        if (!$this->isAvailable()) {
+            return null;
+        }
+
         try {
-            $stmt = $this->getConnection()->prepare("
+            $conn = $this->getConnection();
+            if (!$conn) return null;
+
+            $stmt = $conn->prepare("
                 SELECT * FROM users WHERE extension = ?
             ");
             $stmt->execute([$extension]);
@@ -192,6 +284,10 @@ class AsteriskDB {
      * @return array
      */
     public function parseExtensionsAdditional() {
+        if (!$this->isAvailable()) {
+            return [];
+        }
+
         $contexts = [];
         $configFile = '/etc/asterisk/extensions_additional.conf';
 

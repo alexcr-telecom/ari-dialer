@@ -5,13 +5,27 @@ require_once __DIR__ . '/../config/database.php';
 class CDR {
     private $cdrDb;
     private $dialerDb;
+    private $cdrAvailable = false;
 
     public function __construct() {
-        $this->cdrDb = CdrDatabase::getInstance()->getConnection();
+        $cdrInstance = CdrDatabase::getInstance();
+        $this->cdrAvailable = $cdrInstance->isAvailable();
+        $this->cdrDb = $cdrInstance->getConnection();
         $this->dialerDb = Database::getInstance()->getConnection();
     }
 
+    /**
+     * Check if CDR database is available
+     */
+    public function isCdrAvailable() {
+        return $this->cdrAvailable && $this->cdrDb !== null;
+    }
+
     public function getCallRecords($filters = [], $limit = 100, $offset = 0) {
+        if (!$this->isCdrAvailable()) {
+            // Fallback to dialer database call logs if CDR not available
+            return $this->getDialerCallRecords($filters, $limit, $offset);
+        }
         $sql = "SELECT
                     cdr.uniqueid,
                     cdr.src,
@@ -150,7 +164,109 @@ class CDR {
         return $records;
     }
 
+    /**
+     * Fallback method to get call records from dialer database when CDR is not available
+     */
+    private function getDialerCallRecords($filters = [], $limit = 100, $offset = 0) {
+        $sql = "SELECT
+                    cl.id as uniqueid,
+                    cl.source_number as src,
+                    l.phone_number as dst,
+                    '' as clid,
+                    '' as channel,
+                    '' as dstchannel,
+                    'Dial' as lastapp,
+                    l.phone_number as lastdata,
+                    cl.call_start as calldate,
+                    cl.answer_time as answer,
+                    cl.call_end as end,
+                    cl.duration,
+                    cl.duration as billsec,
+                    cl.disposition,
+                    '' as accountcode,
+                    '' as userfield,
+                    c.name as campaign_name,
+                    l.name as lead_name,
+                    l.phone_number as phone_number,
+                    c.extension as agent_extension
+                FROM call_logs cl
+                LEFT JOIN leads l ON cl.lead_id = l.id
+                LEFT JOIN campaigns c ON cl.campaign_id = c.id
+                WHERE 1=1";
+
+        $params = [];
+
+        if (!empty($filters['date_from'])) {
+            $sql .= " AND DATE(cl.call_start) >= :date_from";
+            $params[':date_from'] = $filters['date_from'];
+        }
+
+        if (!empty($filters['date_to'])) {
+            $sql .= " AND DATE(cl.call_start) <= :date_to";
+            $params[':date_to'] = $filters['date_to'];
+        }
+
+        if (!empty($filters['phone_number'])) {
+            $sql .= " AND l.phone_number LIKE :phone_number";
+            $params[':phone_number'] = '%' . $filters['phone_number'] . '%';
+        }
+
+        if (!empty($filters['disposition'])) {
+            $sql .= " AND cl.disposition = :disposition";
+            $params[':disposition'] = $filters['disposition'];
+        }
+
+        if (!empty($filters['agent_extension'])) {
+            $sql .= " AND c.extension = :agent_extension";
+            $params[':agent_extension'] = $filters['agent_extension'];
+        }
+
+        $sql .= " ORDER BY cl.call_start DESC LIMIT :limit OFFSET :offset";
+        $params[':limit'] = $limit;
+        $params[':offset'] = $offset;
+
+        $stmt = $this->dialerDb->prepare($sql);
+
+        foreach ($params as $key => $value) {
+            if ($key === ':limit' || $key === ':offset') {
+                $stmt->bindValue($key, (int)$value, PDO::PARAM_INT);
+            } else {
+                $stmt->bindValue($key, $value);
+            }
+        }
+
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
     public function getCallRecordCount($filters = []) {
+        if (!$this->isCdrAvailable()) {
+            // Fallback to dialer database
+            $sql = "SELECT COUNT(*) as total FROM call_logs cl
+                    LEFT JOIN leads l ON cl.lead_id = l.id
+                    LEFT JOIN campaigns c ON cl.campaign_id = c.id
+                    WHERE 1=1";
+
+            $params = [];
+            if (!empty($filters['date_from'])) {
+                $sql .= " AND DATE(cl.call_start) >= :date_from";
+                $params[':date_from'] = $filters['date_from'];
+            }
+            if (!empty($filters['date_to'])) {
+                $sql .= " AND DATE(cl.call_start) <= :date_to";
+                $params[':date_to'] = $filters['date_to'];
+            }
+            if (!empty($filters['phone_number'])) {
+                $sql .= " AND l.phone_number LIKE :phone_number";
+                $params[':phone_number'] = '%' . $filters['phone_number'] . '%';
+            }
+
+            $stmt = $this->dialerDb->prepare($sql);
+            $stmt->execute($params);
+            $result = $stmt->fetch();
+            return $result['total'];
+        }
+
         $sql = "SELECT COUNT(*) as total FROM cdr WHERE 1=1";
 
         $params = [];
@@ -187,6 +303,35 @@ class CDR {
     }
 
     public function getStatistics($filters = []) {
+        if (!$this->isCdrAvailable()) {
+            // Fallback to dialer database statistics
+            $sql = "SELECT
+                        COUNT(*) as total_calls,
+                        COUNT(CASE WHEN cl.disposition = 'ANSWERED' THEN 1 END) as answered_calls,
+                        COUNT(CASE WHEN cl.disposition = 'BUSY' THEN 1 END) as busy_calls,
+                        COUNT(CASE WHEN cl.disposition = 'NO ANSWER' THEN 1 END) as no_answer_calls,
+                        COUNT(CASE WHEN cl.disposition NOT IN ('ANSWERED', 'BUSY', 'NO ANSWER') THEN 1 END) as failed_calls,
+                        AVG(cl.duration) as avg_duration,
+                        SUM(cl.duration) as total_duration,
+                        ROUND((COUNT(CASE WHEN cl.disposition = 'ANSWERED' THEN 1 END) / COUNT(*)) * 100, 2) as answer_rate
+                    FROM call_logs cl
+                    WHERE cl.call_start IS NOT NULL";
+
+            $params = [];
+            if (!empty($filters['date_from'])) {
+                $sql .= " AND DATE(cl.call_start) >= :date_from";
+                $params[':date_from'] = $filters['date_from'];
+            }
+            if (!empty($filters['date_to'])) {
+                $sql .= " AND DATE(cl.call_start) <= :date_to";
+                $params[':date_to'] = $filters['date_to'];
+            }
+
+            $stmt = $this->dialerDb->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetch();
+        }
+
         $sql = "SELECT
                     COUNT(*) as total_calls,
                     COUNT(CASE WHEN disposition = 'ANSWERED' THEN 1 END) as answered_calls,
@@ -265,6 +410,12 @@ class CDR {
     }
 
     public function getDispositions() {
+        if (!$this->isCdrAvailable()) {
+            $sql = "SELECT DISTINCT disposition FROM call_logs WHERE disposition IS NOT NULL AND disposition != '' ORDER BY disposition";
+            $stmt = $this->dialerDb->query($sql);
+            return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        }
+
         $sql = "SELECT DISTINCT disposition FROM cdr WHERE disposition IS NOT NULL AND disposition != '' ORDER BY disposition";
         $stmt = $this->cdrDb->query($sql);
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -353,6 +504,10 @@ class CDR {
     }
 
     public function testConnection() {
+        if (!$this->isCdrAvailable()) {
+            return ['success' => false, 'message' => 'CDR database not available - running in standalone mode'];
+        }
+
         try {
             $this->cdrDb->query("SELECT 1 FROM cdr LIMIT 1");
             return ['success' => true, 'message' => 'CDR database connection successful'];
