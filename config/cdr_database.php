@@ -4,7 +4,7 @@
  * Configuration for connecting to asteriskcdrdb database
  */
 
-require_once __DIR__ . '/config.php';
+require_once 'config.php';
 
 class CdrDatabase {
     private static $instance = null;
