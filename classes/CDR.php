@@ -170,7 +170,7 @@ class CDR {
     private function getDialerCallRecords($filters = [], $limit = 100, $offset = 0) {
         $sql = "SELECT
                     cl.id as uniqueid,
-                    cl.source_number as src,
+                    cl.phone_number as src,
                     l.phone_number as dst,
                     '' as clid,
                     '' as channel,
@@ -178,7 +178,7 @@ class CDR {
                     'Dial' as lastapp,
                     l.phone_number as lastdata,
                     cl.call_start as calldate,
-                    cl.answer_time as answer,
+                    cl.call_start as answer,
                     cl.call_end as end,
                     cl.duration,
                     cl.duration as billsec,
@@ -436,6 +436,11 @@ class CDR {
     }
 
     public function getCallsByHour($filters = []) {
+        if (!$this->isCdrAvailable()) {
+            // Return empty array if CDR not available
+            return [];
+        }
+
         $sql = "SELECT
                     HOUR(calldate) as hour,
                     COUNT(*) as call_count,
@@ -463,6 +468,11 @@ class CDR {
     }
 
     public function getCallsByDate($filters = [], $days = 7) {
+        if (!$this->isCdrAvailable()) {
+            // Return empty array if CDR not available
+            return [];
+        }
+
         $sql = "SELECT
                     DATE(calldate) as call_date,
                     COUNT(*) as call_count,
