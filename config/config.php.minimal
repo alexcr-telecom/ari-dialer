@@ -1,20 +1,43 @@
 <?php
 class Config {
+    // Main Database Configuration
     const DB_HOST = 'localhost';
     const DB_NAME = 'asterisk_dialer';
     const DB_USER = 'dialer_user';
     const DB_PASS = 'dialer_password';
-    
+
+    // Asterisk ARI Configuration
     const ARI_HOST = 'localhost';
     const ARI_PORT = 8088;
     const ARI_USER = 'ari_user';
     const ARI_PASS = 'ari_password';
     const ARI_APP = 'dialer_app';
-    
+
+    // Asterisk Database Configuration (FreePBX) - Optional
+    const ASTERISK_DB_HOST = 'localhost';
+    const ASTERISK_DB_NAME = 'asterisk';
+    const ASTERISK_DB_USER = 'freepbxuser';
+    const ASTERISK_DB_PASS = 'freepbx_password';
+
+    // CDR Database Configuration - Optional
+    const CDR_DB_HOST = 'localhost';
+    const CDR_DB_PORT = '3306';
+    const CDR_DB_NAME = 'asteriskcdrdb';
+    const CDR_DB_USER = 'cdr_user';
+    const CDR_DB_PASS = 'cdr_password';
+
+    // Basic Settings
     const ASTERISK_CONTEXT = 'from-internal';
     const MAX_CALLS_PER_MINUTE = 100;
-    const DEFAULT_TIMEZONE = 'Moscow';
-    
+    const DEFAULT_TIMEZONE = 'UTC';
+    const DEBUG_MODE = false;
+
+    // Directories
     const UPLOAD_DIR = '../uploads/';
     const LOG_DIR = '../logs/';
+
+    // Helper Methods
+    public static function getARIUrl() {
+        return "http://" . self::ARI_HOST . ":" . self::ARI_PORT . "/ari";
+    }
 }

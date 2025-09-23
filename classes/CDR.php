@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/../config/cdr_database.php';
 require_once __DIR__ . '/../config/database.php';
 
 class CDR {
@@ -8,9 +7,8 @@ class CDR {
     private $cdrAvailable = false;
 
     public function __construct() {
-        $cdrInstance = CdrDatabase::getInstance();
-        $this->cdrAvailable = $cdrInstance->isAvailable();
-        $this->cdrDb = $cdrInstance->getConnection();
+        $this->cdrAvailable = Database::isCdrAvailable();
+        $this->cdrDb = Database::getCdrConnectionInstance();
         $this->dialerDb = Database::getInstance()->getConnection();
     }
 

@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../config/database.php';
 
 class AsteriskDB {
     private static $instance = null;
@@ -55,7 +56,7 @@ class AsteriskDB {
         }
 
         try {
-            $dsn = Config::getAsteriskDSN();
+            $dsn = Database::getAsteriskDSN();
             $options = [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -86,7 +87,7 @@ class AsteriskDB {
     public function testConnection() {
         try {
             // Don't use getConnection() here to avoid recursion
-            $dsn = Config::getAsteriskDSN();
+            $dsn = Database::getAsteriskDSN();
             $pdo = new PDO($dsn, Config::ASTERISK_DB_USER, Config::ASTERISK_DB_PASS, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_TIMEOUT => 5 // 5 second timeout

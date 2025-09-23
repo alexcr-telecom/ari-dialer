@@ -57,7 +57,20 @@ class Config {
     
     const ENABLE_WEBHOOKS = false;              // Enable webhook notifications
     const WEBHOOK_SECRET = 'your_webhook_secret_here';
-    
+
+    // Asterisk Database Configuration (FreePBX)
+    const ASTERISK_DB_HOST = 'localhost';
+    const ASTERISK_DB_NAME = 'asterisk';
+    const ASTERISK_DB_USER = 'freepbxuser';
+    const ASTERISK_DB_PASS = 'your_freepbx_password';
+
+    // CDR Database Configuration
+    const CDR_DB_HOST = 'localhost';
+    const CDR_DB_PORT = '3306';
+    const CDR_DB_NAME = 'asteriskcdrdb';
+    const CDR_DB_USER = 'cdr_user';
+    const CDR_DB_PASS = 'your_cdr_password';
+
     // CDR Integration
     const CDR_TABLE = 'cdr';                   // Asterisk CDR table name
     const CDR_DATABASE = 'asteriskcdrdb';      // CDR database name (if different)
@@ -105,21 +118,13 @@ class Config {
     }
     
     /**
-     * Get database DSN string
-     * @return string
-     */
-    public static function getDSN() {
-        return "mysql:host=" . self::DB_HOST . ";dbname=" . self::DB_NAME . ";charset=utf8mb4";
-    }
-    
-    /**
      * Get ARI connection URL
      * @return string
      */
     public static function getARIUrl() {
         return "http://" . self::ARI_HOST . ":" . self::ARI_PORT . "/ari";
     }
-    
+
     /**
      * Get WebSocket URL for ARI events
      * @return string
