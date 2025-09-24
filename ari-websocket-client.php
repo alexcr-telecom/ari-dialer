@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/config/config.php';
+require_once __DIR__ . '/classes/Dialer.php';
 
 class ARIWebSocketClient {
     private $wsUrl = 'ws://localhost:8088/ari/events?api_key=ari_user:ari_password&app=dialer_app';
@@ -12,8 +13,13 @@ class ARIWebSocketClient {
     private $apiKey = 'ari_user:ari_password';
     private $appName = 'dialer_app';
     private $running = false;
+    private $dialer;
+    private $lastChannelStates = [];
     
     public function __construct() {
+        // Initialize dialer for event handling
+        $this->dialer = new Dialer();
+
         // Set up signal handlers for graceful shutdown
         if (function_exists('pcntl_signal')) {
             pcntl_signal(SIGTERM, [$this, 'shutdown']);
@@ -95,13 +101,25 @@ class ARIWebSocketClient {
         // Get current channels and bridges to simulate events
         $channels = $this->getChannels();
         $bridges = $this->getBridges();
-        
+
+        $currentChannelIds = [];
+
         if (!empty($channels)) {
             foreach ($channels as $channel) {
+                $currentChannelIds[] = $channel['id'];
                 $this->handleChannelEvent($channel);
             }
         }
-        
+
+        // Check for destroyed channels (channels that were active but are no longer in the list)
+        foreach ($this->lastChannelStates as $channelId => $lastState) {
+            if (!in_array($channelId, $currentChannelIds)) {
+                $this->log("Channel destroyed: $channelId (was in state: $lastState)");
+                $this->handleChannelDestroyed($channelId);
+                unset($this->lastChannelStates[$channelId]);
+            }
+        }
+
         if (!empty($bridges)) {
             foreach ($bridges as $bridge) {
                 $this->handleBridgeEvent($bridge);
@@ -120,15 +138,41 @@ class ARIWebSocketClient {
     }
     
     private function handleChannelEvent($channel) {
+        $channelId = $channel['id'];
+        $currentState = $channel['state'];
+        $lastState = $this->lastChannelStates[$channelId] ?? null;
+
+        // Only process if state has actually changed
+        if ($lastState !== $currentState) {
+            $this->log("Channel State Changed: $channelId - $lastState -> $currentState");
+
+            $event = [
+                'type' => 'ChannelStateChange',
+                'timestamp' => date('c'),
+                'channel' => $channel,
+                'application' => $this->appName
+            ];
+
+            $this->processEvent($event);
+            $this->lastChannelStates[$channelId] = $currentState;
+        }
+
+    }
+
+    private function handleChannelDestroyed($channelId, $channel = null) {
+        $this->log("Processing channel destroyed: $channelId");
+
         $event = [
-            'type' => 'ChannelStateChange',
+            'type' => 'ChannelDestroyed',
             'timestamp' => date('c'),
-            'channel' => $channel,
+            'channel' => $channel ?: ['id' => $channelId, 'state' => 'Down'],
+            'cause' => 16, // Normal clearing
+            'cause_txt' => 'Normal Clearing',
             'application' => $this->appName
         ];
-        
-        $this->log("Channel Event: " . $channel['id'] . " - State: " . $channel['state']);
-        $this->processEvent($event);
+
+        // Use Dialer's event handling to update call logs
+        $this->dialer->handleChannelEvent($event);
     }
     
     private function handleBridgeEvent($bridge) {
@@ -149,11 +193,16 @@ class ARIWebSocketClient {
             case 'ChannelStateChange':
                 $this->handleChannelStateChange($event);
                 break;
-                
+
+            case 'ChannelDestroyed':
+                // Event already processed by handleChannelDestroyed, no additional action needed
+                $this->log("Channel destroyed event processed: " . $event['channel']['id']);
+                break;
+
             case 'BridgeCreated':
                 $this->handleBridgeCreated($event);
                 break;
-                
+
             default:
                 $this->log("Unhandled event type: " . $event['type']);
         }
@@ -162,12 +211,9 @@ class ARIWebSocketClient {
     private function handleChannelStateChange($event) {
         $channel = $event['channel'];
         $this->log("Processing channel state change: {$channel['id']} -> {$channel['state']}");
-        
-        // Example: Answer incoming calls
-        if ($channel['state'] === 'Ring') {
-            $this->log("Incoming call detected, answering...");
-            $this->answerChannel($channel['id']);
-        }
+
+        // Use Dialer's event handling to update call logs
+        $this->dialer->handleChannelEvent($event);
     }
     
     private function handleBridgeCreated($event) {

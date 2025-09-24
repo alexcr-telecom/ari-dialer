@@ -4,6 +4,8 @@
  * Displays detailed call logs with filtering and real-time status
  */
 
+require_once __DIR__ . '/../config/database.php';
+
 // Get campaigns for filter dropdown
 try {
     $database = Database::getInstance();
