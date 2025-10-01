@@ -17,37 +17,87 @@ class ARI {
     public function originateCall($endpoint, $extension, $context = null, $priority = 1, $variables = [], $callerId = null) {
         $context = $context ?? Config::ASTERISK_CONTEXT;
 
-        $data = [
+        // Build URL parameters (endpoint, extension, context, etc.)
+        $params = [
             'endpoint' => $endpoint,
             'extension' => $extension,
             'context' => $context,
             'priority' => $priority,
-            'timeout' => 120
+            'timeout' => 120,
+            'app' => $this->app
         ];
 
+        // Add caller ID as URL parameters (caller[name] and caller[number])
+        // Also add connected ID (connected[name] and connected[number])
         if ($callerId) {
-            $data['callerId'] = $callerId;
-        }
-
-        if (!empty($variables)) {
-            foreach ($variables as $key => $value) {
-                $data['variables[' . $key . ']'] = $value;
+            if (is_array($callerId)) {
+                // Caller object with name and number
+                if (!empty($callerId['name'])) {
+                    $params['caller[name]'] = $callerId['name'];
+                    $params['connected[name]'] = $callerId['name'];
+                }
+                if (!empty($callerId['number'])) {
+                    $params['caller[number]'] = $callerId['number'];
+                    $params['connected[number]'] = $callerId['number'];
+                }
+            } else {
+                // Legacy string format - parse if it contains both name and number
+                if (preg_match('/^"([^"]*)" <(.+)>$/', $callerId, $matches)) {
+                    $params['caller[name]'] = $matches[1];
+                    $params['caller[number]'] = $matches[2];
+                    $params['connected[name]'] = $matches[1];
+                    $params['connected[number]'] = $matches[2];
+                } else {
+                    // Just a number
+                    $params['caller[number]'] = $callerId;
+                    $params['connected[number]'] = $callerId;
+                }
             }
         }
 
-        return $this->makeRequest('POST', '/channels', $data);
+        // Build JSON body with variables object
+        // ARI requires all variable values to be strings
+        $body = null;
+        if (!empty($variables)) {
+            $stringVariables = [];
+            foreach ($variables as $key => $value) {
+                $stringVariables[$key] = (string)$value;
+            }
+            $body = [
+                'variables' => $stringVariables
+            ];
+        }
+
+        // Log the request data for debugging
+        error_log("ARI Channel URL params: " . json_encode($params));
+        error_log("ARI Channel JSON body: " . ($body ? json_encode($body) : 'null'));
+
+        return $this->makeRequest('POST', '/channels', $params, $body);
+    }
+
+    /**
+     * Create a caller ID object for ARI calls
+     * @param string $name The caller name
+     * @param string $number The caller number
+     * @return array CallerID object
+     */
+    public function createCallerID($name = '', $number = '') {
+        return [
+            'name' => $name,
+            'number' => $number
+        ];
     }
     
     public function getChannels() {
-        return $this->makeRequest('GET', '/channels');
+        return $this->makeRequest('GET', '/channels', null, null);
     }
-    
+
     public function getChannel($channelId) {
-        return $this->makeRequest('GET', '/channels/' . $channelId);
+        return $this->makeRequest('GET', '/channels/' . $channelId, null, null);
     }
-    
+
     public function hangupChannel($channelId, $reason = 'normal') {
-        return $this->makeRequest('DELETE', '/channels/' . $channelId, ['reason' => $reason]);
+        return $this->makeRequest('DELETE', '/channels/' . $channelId, ['reason' => $reason], null);
     }
     
     public function bridgeChannels($channelId1, $channelId2) {
@@ -61,37 +111,37 @@ class ARI {
     }
     
     public function createBridge() {
-        $result = $this->makeRequest('POST', '/bridges', ['type' => 'mixing']);
+        $result = $this->makeRequest('POST', '/bridges', ['type' => 'mixing'], null);
         return $result['id'] ?? false;
     }
-    
+
     public function addChannelToBridge($bridgeId, $channelId) {
         return $this->makeRequest('POST', '/bridges/' . $bridgeId . '/addChannel', [
             'channel' => $channelId
-        ]);
+        ], null);
     }
-    
+
     public function startRecording($channelId, $name = null) {
         $name = $name ?? 'recording-' . $channelId . '-' . time();
-        
+
         return $this->makeRequest('POST', '/channels/' . $channelId . '/record', [
             'name' => $name,
             'format' => 'wav',
             'maxDurationSeconds' => 3600,
             'maxSilenceSeconds' => 5,
             'ifExists' => 'overwrite'
-        ]);
+        ], null);
     }
-    
+
     public function getRecordings() {
-        return $this->makeRequest('GET', '/recordings/stored');
+        return $this->makeRequest('GET', '/recordings/stored', null, null);
     }
-    
+
     public function playSound($channelId, $sound, $lang = 'en') {
         return $this->makeRequest('POST', '/channels/' . $channelId . '/play', [
             'media' => 'sound:' . $sound,
             'lang' => $lang
-        ]);
+        ], null);
     }
     
     public function getWebSocketUrl() {
@@ -104,17 +154,25 @@ class ARI {
         if ($eventSource) {
             $params['eventSource'] = $eventSource;
         }
-        
-        return $this->makeRequest('POST', '/applications/' . $this->app . '/subscription', $params);
+
+        return $this->makeRequest('POST', '/applications/' . $this->app . '/subscription', $params, null);
     }
     
-    public function makeRequest($method, $endpoint, $data = null) {
+    public function makeRequest($method, $endpoint, $params = null, $body = null) {
         $url = $this->baseUrl . $endpoint;
+
+        // Add query parameters to URL if provided
+        if ($params && is_array($params)) {
+            $url .= '?' . http_build_query($params);
+        }
 
         // Log ARI request
         $requestLog = "[ARI REQUEST] " . date('Y-m-d H:i:s') . " - $method $endpoint";
-        if ($data) {
-            $requestLog .= " | Data: " . json_encode($data);
+        if ($params) {
+            $requestLog .= " | Params: " . json_encode($params);
+        }
+        if ($body) {
+            $requestLog .= " | Body: " . json_encode($body);
         }
         $this->logToErrorLog($requestLog);
 
@@ -131,13 +189,13 @@ class ARI {
             CURLOPT_SSL_VERIFYHOST => false
         ]);
 
-        if ($data && in_array($method, ['POST', 'PUT', 'PATCH'])) {
-            if ($method === 'POST' && $endpoint === '/channels') {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-            } else {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-            }
+        // Send JSON body if provided
+        if ($body && in_array($method, ['POST', 'PUT', 'PATCH'])) {
+            $jsonData = json_encode($body);
+            error_log("ARI Request JSON body: " . $jsonData);
+
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
         }
 
         $response = curl_exec($ch);
@@ -167,7 +225,7 @@ class ARI {
     
     public function testConnection() {
         try {
-            $result = $this->makeRequest('GET', '/asterisk/info');
+            $result = $this->makeRequest('GET', '/asterisk/info', null, null);
             return [
                 'success' => true,
                 'message' => 'Connected to Asterisk ' . ($result['system']['version'] ?? 'Unknown'),

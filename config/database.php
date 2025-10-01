@@ -20,7 +20,10 @@ class Database {
                 [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
+                    PDO::ATTR_TIMEOUT => 30,
+                    PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true
                 ]
             );
         } catch (PDOException $e) {
@@ -36,7 +39,48 @@ class Database {
     }
 
     public function getConnection() {
+        // Check if connection is still alive
+        if (!$this->isConnectionAlive()) {
+            $this->reconnect();
+        }
         return $this->connection;
+    }
+
+    /**
+     * Check if the database connection is still alive
+     * @return bool
+     */
+    private function isConnectionAlive() {
+        try {
+            $this->connection->query('SELECT 1');
+            return true;
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Reconnect to the database
+     */
+    private function reconnect() {
+        try {
+            $this->connection = new PDO(
+                self::getDSN(),
+                Config::DB_USER,
+                Config::DB_PASS,
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
+                    PDO::ATTR_TIMEOUT => 30
+                ]
+            );
+            error_log("Database connection restored");
+        } catch (PDOException $e) {
+            error_log("Database reconnection failed: " . $e->getMessage());
+            throw $e;
+        }
     }
 
     /**
@@ -182,10 +226,10 @@ class Database {
         }
 
         // Check if CDR database configuration exists
-        if (!defined('Config::CDR_DB_HOST') ||
-            !Config::CDR_DB_HOST ||
-            !Config::CDR_DB_NAME ||
-            !Config::CDR_DB_USER) {
+        if (!class_exists('Config') ||
+            empty(Config::CDR_DB_HOST) ||
+            empty(Config::CDR_DB_NAME) ||
+            empty(Config::CDR_DB_USER)) {
             error_log("CDR Database not configured - running in standalone mode");
             self::$cdrAvailable = false;
             return false;

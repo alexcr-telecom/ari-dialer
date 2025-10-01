@@ -43,17 +43,21 @@ try {
     
     $variables = [
         'CAMPAIGN_ID' => 'test',
-        'LEAD_ID' => 'test123',
-        'CALLERID(name)' => 'Test Campaign',
-        'CALLERID(num)' => $agentExtension
+        'LEAD_ID' => 'test123'
     ];
-    
+
+    // Test the new CallerID object format (follows ARI schema)
+    $callerId = $ari->createCallerID('Test Lead Name', $testNumber);
+    echo "Using CallerID object: " . json_encode($callerId) . "<br>";
+    echo "This will be sent as 'caller' field in ARI request per schema<br>";
+
     $response = $ari->originateCall(
         $endpoint,
         $extension,
         'from-internal',
         1,
-        $variables
+        $variables,
+        $callerId
     );
     
     if ($response && isset($response['id'])) {

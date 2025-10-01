@@ -60,32 +60,29 @@ CREATE TABLE leads (
     INDEX idx_phone_number (phone_number)
 );
 
--- Call logs table for comprehensive call tracking (NEW in v2.1)
--- This table provides detailed logging for every call attempt with:
--- - Real-time status tracking (initiated → ringing → answered/failed)
--- - Duration calculation for answered calls
--- - Channel ID for Asterisk debugging
--- - Disposition tracking (ANSWERED, BUSY, NO ANSWER, etc.)
--- - Agent assignment and campaign association
-CREATE TABLE call_logs (
+-- Dialer CDR table - Links CDR records with campaign and lead data
+CREATE TABLE dialer_cdr (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    lead_id INT,                           -- Reference to lead (NULL if direct dial)
-    campaign_id INT NOT NULL,              -- Campaign this call belongs to
-    phone_number VARCHAR(20) NOT NULL,     -- Phone number being dialed
-    agent_extension VARCHAR(20),           -- Agent extension handling the call
-    channel_id VARCHAR(100),               -- Asterisk channel ID for debugging
-    call_start DATETIME,                   -- When call was initiated
-    call_end DATETIME,                     -- When call ended (NULL if ongoing)
-    duration INT DEFAULT 0,                -- Call duration in seconds
-    status ENUM('initiated', 'ringing', 'answered', 'failed', 'hung_up') DEFAULT 'initiated',
-    disposition VARCHAR(50),               -- Call result (ANSWERED, BUSY, NO ANSWER, etc.)
-    recording_file VARCHAR(255),           -- Path to call recording (if enabled)
+    campaign_id INT,
+    lead_id INT,
+    channel_id VARCHAR(100),
+    uniqueid VARCHAR(50),
+    phone_number VARCHAR(20),
+    lead_name VARCHAR(255),
+    agent_extension VARCHAR(20),
+    call_start DATETIME,
+    call_end DATETIME,
+    duration INT DEFAULT 0,
+    billsec INT DEFAULT 0,
+    disposition VARCHAR(50),
+    status VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL,
     FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL,
-    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
-    INDEX idx_campaign_date (campaign_id, call_start),  -- For campaign reports
-    INDEX idx_channel_id (channel_id),                  -- For debugging
-    INDEX idx_status_date (status, call_start)          -- For status reports
+    INDEX idx_campaign_id (campaign_id),
+    INDEX idx_lead_id (lead_id),
+    INDEX idx_uniqueid (uniqueid),
+    INDEX idx_call_start (call_start)
 );
 
 -- Agents table
@@ -148,7 +145,6 @@ INSERT INTO agents (username, password, extension, name, role) VALUES
 
 -- Create indexes for better performance
 CREATE INDEX idx_leads_next_attempt ON leads(next_attempt);
-CREATE INDEX idx_call_logs_start_time ON call_logs(call_start);
 CREATE INDEX idx_agents_status ON agents(status);
 
 -- Views for reporting

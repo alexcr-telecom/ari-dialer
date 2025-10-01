@@ -23,6 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo '<div class="alert alert-danger">Error updating campaign.</div>';
         }
     } elseif ($action === 'add_leads' && $campaignId) {
+        $importedCount = 0;
+        $importSuccess = false;
+
         if (!empty($_POST['phone_numbers'])) {
             $phones = explode("\n", $_POST['phone_numbers']);
             $leads = [];
@@ -34,7 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             try {
                 $campaign->addLeadsBulk($campaignId, $leads);
-                echo '<div class="alert alert-success">' . count($leads) . ' leads added successfully!</div>';
+                $importedCount = count($leads);
+                $importSuccess = true;
+                echo '<div class="alert alert-success">' . $importedCount . ' leads added successfully!</div>';
             } catch (Exception $e) {
                 echo '<div class="alert alert-danger">Error adding leads: ' . $e->getMessage() . '</div>';
             }
@@ -50,10 +55,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             fclose($handle);
             try {
                 $campaign->addLeadsBulk($campaignId, $leads);
-                echo '<div class="alert alert-success">' . count($leads) . ' leads imported successfully!</div>';
+                $importedCount = count($leads);
+                $importSuccess = true;
+                echo '<div class="alert alert-success">' . $importedCount . ' leads imported successfully!</div>';
             } catch (Exception $e) {
                 echo '<div class="alert alert-danger">Error importing leads: ' . $e->getMessage() . '</div>';
             }
+        }
+
+        // If import was successful, show the imported leads
+        if ($importSuccess && $importedCount > 0) {
+            // Get the most recently added leads for this campaign
+            $recentLeads = $campaign->getLeads([
+                'campaign_id' => $campaignId,
+                'limit' => 50,
+                'offset' => 0
+            ]);
+
+            echo '<div class="card mt-3">
+                    <div class="card-header">
+                        <h6><i class="fas fa-list"></i> Recently Imported Leads (' . $importedCount . ' total)</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <a href="?page=campaigns&action=view&id=' . $campaignId . '" class="btn btn-primary">
+                                <i class="fas fa-eye"></i> View All Campaign Leads
+                            </a>
+                            <a href="?page=campaigns&action=add_leads&id=' . $campaignId . '" class="btn btn-secondary">
+                                <i class="fas fa-plus"></i> Add More Leads
+                            </a>
+                        </div>';
+
+            if (count($recentLeads) > 0) {
+                echo '<div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Phone Number</th>
+                                    <th>Name</th>
+                                    <th>Status</th>
+                                    <th>Added</th>
+                                </tr>
+                            </thead>
+                            <tbody>';
+
+                foreach (array_slice($recentLeads, 0, 50) as $lead) {
+                    echo '<tr>
+                            <td><strong>' . htmlspecialchars($lead['phone_number']) . '</strong></td>
+                            <td>';
+                    if (!empty($lead['name'])) {
+                        echo '<strong>' . htmlspecialchars($lead['name']) . '</strong>';
+                    } else {
+                        echo '<em class="text-muted">No name</em>';
+                    }
+                    echo '</td>
+                            <td><span class="badge bg-secondary">Pending</span></td>
+                            <td>' . date('Y-m-d H:i', strtotime($lead['created_at'])) . '</td>
+                          </tr>';
+                }
+
+                echo '</tbody>
+                        </table>
+                      </div>';
+
+                if ($importedCount > 50) {
+                    echo '<div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Showing first 50 of ' . $importedCount . ' imported leads.
+                            <a href="?page=campaigns&action=view&id=' . $campaignId . '">View all leads</a>
+                          </div>';
+                }
+            }
+
+            echo '</div>
+                </div>';
         }
     }
 }
@@ -369,10 +444,25 @@ if ($action === 'delete' && $campaignId) {
     </div>
 
 <?php elseif ($action === 'view' && $campaignId): ?>
-    <?php 
+    <?php
     $campaignData = $campaign->getById($campaignId);
-    $leads = $campaign->getLeads($campaignId, null, 100);
     $stats = $campaign->getStats($campaignId);
+
+    // Pagination for leads
+    $leadsPerPage = 50;
+    $currentPage = isset($_GET['leads_page']) ? max(1, (int)$_GET['leads_page']) : 1;
+    $offset = ($currentPage - 1) * $leadsPerPage;
+
+    // Get total leads count
+    $totalLeads = $stats['total_leads'] ?? 0;
+    $totalPages = ceil($totalLeads / $leadsPerPage);
+
+    // Get leads for current page
+    $leads = $campaign->getLeads([
+        'campaign_id' => $campaignId,
+        'limit' => $leadsPerPage,
+        'offset' => $offset
+    ]);
     ?>
     
     <div class="row">
@@ -437,43 +527,126 @@ if ($action === 'delete' && $campaignId) {
     </div>
     
     <div class="card">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h6>Leads</h6>
+            <small class="text-muted">
+                <?php
+                $startRecord = ($currentPage - 1) * $leadsPerPage + 1;
+                $endRecord = min($currentPage * $leadsPerPage, $totalLeads);
+                echo "Showing $startRecord-$endRecord of $totalLeads leads";
+                ?>
+            </small>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-sm">
-                    <thead>
-                        <tr>
-                            <th>Phone Number</th>
-                            <th>Name</th>
-                            <th>Status</th>
-                            <th>Attempts</th>
-                            <th>Last Attempt</th>
-                            <th>Disposition</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($leads as $lead): ?>
-                        <tr>
-                            <td><?php echo htmlspecialchars($lead['phone_number']); ?></td>
-                            <td><?php echo htmlspecialchars($lead['name'] ?? ''); ?></td>
-                            <td>
-                                <span class="badge bg-<?php 
-                                    echo $lead['status'] === 'answered' ? 'success' : 
-                                        ($lead['status'] === 'pending' ? 'secondary' : 'warning'); 
-                                ?>">
-                                    <?php echo ucfirst($lead['status']); ?>
-                                </span>
-                            </td>
-                            <td><?php echo $lead['attempts']; ?></td>
-                            <td><?php echo $lead['last_attempt'] ? date('Y-m-d H:i', strtotime($lead['last_attempt'])) : '-'; ?></td>
-                            <td><?php echo htmlspecialchars($lead['disposition'] ?? ''); ?></td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
+            <?php if (count($leads) > 0): ?>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Phone Number</th>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Attempts</th>
+                                <th>Last Attempt</th>
+                                <th>Disposition</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($leads as $lead): ?>
+                            <tr>
+                                <td>
+                                    <strong><?php echo htmlspecialchars($lead['phone_number']); ?></strong>
+                                    <?php if (!empty($lead['name'])): ?>
+                                        <br><small class="text-muted">ID: <?php echo htmlspecialchars($lead['name']); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if (!empty($lead['name'])): ?>
+                                        <strong><?php echo htmlspecialchars($lead['name']); ?></strong>
+                                    <?php else: ?>
+                                        <em class="text-muted">No name</em>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="badge bg-<?php
+                                        echo $lead['status'] === 'answered' ? 'success' :
+                                            ($lead['status'] === 'pending' ? 'secondary' : 'warning');
+                                    ?>">
+                                        <?php echo ucfirst($lead['status']); ?>
+                                    </span>
+                                </td>
+                                <td><?php echo $lead['attempts']; ?></td>
+                                <td><?php echo $lead['last_attempt'] ? date('Y-m-d H:i', strtotime($lead['last_attempt'])) : '-'; ?></td>
+                                <td><?php echo htmlspecialchars($lead['disposition'] ?? ''); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination Controls -->
+                <?php if ($totalPages > 1): ?>
+                <nav aria-label="Leads pagination">
+                    <ul class="pagination justify-content-center mt-3">
+                        <?php if ($currentPage > 1): ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=campaigns&action=view&id=<?php echo $campaignId; ?>&leads_page=<?php echo $currentPage - 1; ?>">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </a>
+                            </li>
+                        <?php endif; ?>
+
+                        <?php
+                        // Show page numbers (max 5 visible)
+                        $startPage = max(1, $currentPage - 2);
+                        $endPage = min($totalPages, $currentPage + 2);
+
+                        if ($startPage > 1): ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=campaigns&action=view&id=<?php echo $campaignId; ?>&leads_page=1">1</a>
+                            </li>
+                            <?php if ($startPage > 2): ?>
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            <?php endif;
+                        endif;
+
+                        for ($i = $startPage; $i <= $endPage; $i++): ?>
+                            <li class="page-item <?php echo $i === $currentPage ? 'active' : ''; ?>">
+                                <a class="page-link" href="?page=campaigns&action=view&id=<?php echo $campaignId; ?>&leads_page=<?php echo $i; ?>">
+                                    <?php echo $i; ?>
+                                </a>
+                            </li>
+                        <?php endfor;
+
+                        if ($endPage < $totalPages): ?>
+                            <?php if ($endPage < $totalPages - 1): ?>
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            <?php endif; ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=campaigns&action=view&id=<?php echo $campaignId; ?>&leads_page=<?php echo $totalPages; ?>"><?php echo $totalPages; ?></a>
+                            </li>
+                        <?php endif; ?>
+
+                        <?php if ($currentPage < $totalPages): ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=campaigns&action=view&id=<?php echo $campaignId; ?>&leads_page=<?php echo $currentPage + 1; ?>">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        <?php endif; ?>
+                    </ul>
+                </nav>
+                <?php endif; ?>
+            <?php else: ?>
+                <div class="text-center py-4">
+                    <i class="fas fa-phone fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No leads found</h5>
+                    <p class="text-muted">Add leads to this campaign to get started.</p>
+                    <a href="?page=campaigns&action=add_leads&id=<?php echo $campaignId; ?>" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Leads
+                    </a>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -497,7 +670,13 @@ if ($action === 'delete' && $campaignId) {
                         <div class="mb-4">
                             <label class="form-label">OR Upload CSV File</label>
                             <input type="file" class="form-control" name="csv_file" accept=".csv">
-                            <div class="form-text">CSV format: phone_number,name (optional)</div>
+                            <div class="form-text">
+                                <strong>CSV format:</strong> phone_number,name<br>
+                                <strong>Example:</strong><br>
+                                +15551234567,John Smith<br>
+                                5559876543,Jane Doe<br>
+                                <em>Name column is optional but recommended for caller ID display</em>
+                            </div>
                         </div>
                         
                         <button type="submit" class="btn btn-primary">

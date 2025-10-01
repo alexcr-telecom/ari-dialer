@@ -92,6 +92,21 @@ class ARIWebSocketClient {
                 
             } catch (Exception $e) {
                 $this->log("Error in polling loop: " . $e->getMessage());
+
+                // Check if it's a database connection error
+                if (strpos($e->getMessage(), 'MySQL server has gone away') !== false ||
+                    strpos($e->getMessage(), 'Lost connection') !== false) {
+                    $this->log("Database connection lost, attempting to reconnect...");
+
+                    // Try to reinitialize the dialer (which will recreate database connections)
+                    try {
+                        $this->dialer = new Dialer();
+                        $this->log("Database connection restored");
+                    } catch (Exception $reconnectError) {
+                        $this->log("Failed to restore database connection: " . $reconnectError->getMessage());
+                    }
+                }
+
                 sleep(2);
             }
         }
@@ -136,6 +151,21 @@ class ARIWebSocketClient {
         $response = $this->makeHttpRequest('GET', 'bridges');
         return $response['success'] ? $response['data'] : [];
     }
+
+    private function getChannelDetails($channelId) {
+        $response = $this->makeHttpRequest('GET', "channels/$channelId");
+
+        // Log the response to see what we're getting
+        if ($response['success'] && isset($response['data']['channelvars'])) {
+            $this->log("Got channel vars for $channelId: " . json_encode($response['data']['channelvars']));
+        } else if ($response['success']) {
+            $this->log("Channel $channelId has no channelvars in response");
+        } else {
+            $this->log("Failed to get channel $channelId: " . ($response['message'] ?? 'unknown error'));
+        }
+
+        return $response['success'] ? $response['data'] : null;
+    }
     
     private function handleChannelEvent($channel) {
         $channelId = $channel['id'];
@@ -145,6 +175,12 @@ class ARIWebSocketClient {
         // Only process if state has actually changed
         if ($lastState !== $currentState) {
             $this->log("Channel State Changed: $channelId - $lastState -> $currentState");
+
+            // Get full channel details including channel variables
+            $fullChannel = $this->getChannelDetails($channelId);
+            if ($fullChannel) {
+                $channel = $fullChannel;
+            }
 
             $event = [
                 'type' => 'ChannelStateChange',
@@ -162,10 +198,18 @@ class ARIWebSocketClient {
     private function handleChannelDestroyed($channelId, $channel = null) {
         $this->log("Processing channel destroyed: $channelId");
 
+        // Try to get full channel details before it's completely gone
+        if (!$channel) {
+            $channel = $this->getChannelDetails($channelId);
+            if (!$channel) {
+                $channel = ['id' => $channelId, 'state' => 'Down'];
+            }
+        }
+
         $event = [
             'type' => 'ChannelDestroyed',
             'timestamp' => date('c'),
-            'channel' => $channel ?: ['id' => $channelId, 'state' => 'Down'],
+            'channel' => $channel,
             'cause' => 16, // Normal clearing
             'cause_txt' => 'Normal Clearing',
             'application' => $this->appName

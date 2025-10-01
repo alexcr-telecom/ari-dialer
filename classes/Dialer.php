@@ -121,6 +121,20 @@ class Dialer {
     
     public function dialLead($campaignId, $lead) {
         try {
+            // If $lead is an ID, fetch the lead data
+            if (is_numeric($lead)) {
+                $leadId = $lead;
+                $sql = "SELECT * FROM leads WHERE id = :id";
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute([':id' => $leadId]);
+                $lead = $stmt->fetch();
+
+                if (!$lead) {
+                    $this->log("Lead ID $leadId not found", 'ERROR');
+                    return ['success' => false, 'message' => 'Lead not found'];
+                }
+            }
+
             $this->log("Dialing lead ID: " . $lead['id'] . ", phone: " . $lead['phone_number']);
 
             $campaignData = $this->campaign->getById($campaignId);
@@ -141,13 +155,24 @@ class Dialer {
                 'LEAD_ID' => $lead['id'],
                 'AGENT_EXTENSION' => $agentExtension,
                 'CAMPAIGN_NAME' => $campaignData['name'],
-                'AGENT_CONTEXT' => $agentContext
+                'AGENT_CONTEXT' => $agentContext,
+                'LEAD_NAME' => $lead['name'] ?? '',
+                'CALLERID(name)' => $lead['name'] ?? '',
+                'CALLERID(num)' => $lead['phone_number']
             ];
 
             $this->log("Making outbound call to: $endpoint for agent: $agentExtension");
 
-            // Create the outbound call using ARI originateCall method with dialed number as caller ID
-            $response = $this->ari->originateCall($endpoint, $agentExtension, $agentContext, 1, $variables, $lead['phone_number']);
+            // Create caller ID object with separate name and number fields
+            $callerId = $this->ari->createCallerID(
+                !empty($lead['name']) ? $lead['name'] : '',
+                $lead['phone_number']
+            );
+
+            $this->log("Using caller object - Name: '" . $callerId['name'] . "', Number: '" . $callerId['number'] . "'");
+
+            // Create the outbound call using ARI originateCall method with CallerID object
+            $response = $this->ari->originateCall($endpoint, $agentExtension, $agentContext, 1, $variables, $callerId);
 
             $this->log("ARI response: " . json_encode($response));
 
@@ -156,15 +181,8 @@ class Dialer {
 
                 $this->campaign->updateLeadStatus($lead['id'], 'dialed');
 
-                $this->logCall([
-                    'lead_id' => $lead['id'],
-                    'campaign_id' => $campaignId,
-                    'phone_number' => $lead['phone_number'],
-                    'agent_extension' => $agentExtension,
-                    'channel_id' => $response['id'],
-                    'status' => 'initiated',
-                    'call_start' => date('Y-m-d H:i:s')
-                ]);
+                // Create dialer_cdr record immediately with channel information
+                $this->createDialerCdr($lead['id'], $response['id'], $campaignId, $lead['phone_number'], $lead['name'] ?? '', $agentExtension);
 
                 return ['success' => true, 'channel_id' => $response['id']];
             } else {
@@ -273,83 +291,66 @@ class Dialer {
 
         $this->log("Processing ARI event: $eventType for channel: $channelId");
 
-        $callLog = $this->getCallLogByChannelId($channelId);
-        if (!$callLog) {
-            $this->log("No call log found for channel ID: $channelId, Event: $eventType", 'WARN');
-            return;
-        }
+        try {
+            // Look up the dialer_cdr record by channel_id to get lead and campaign info
+            $sql = "SELECT * FROM dialer_cdr WHERE channel_id = :channel_id ORDER BY created_at DESC LIMIT 1";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':channel_id' => $channelId]);
+            $cdrRecord = $stmt->fetch();
 
-        $this->log("Found call log ID: " . $callLog['id'] . " for channel: $channelId, Current status: " . $callLog['status']);
+            if (!$cdrRecord) {
+                $this->log("No dialer_cdr record found for channel: $channelId (may not be a dialer-originated call)", 'DEBUG');
+                return;
+            }
 
-        switch ($eventType) {
-            case 'ChannelStateChange':
-                $this->handleChannelStateChange($event, $callLog);
-                break;
+            $leadId = $cdrRecord['lead_id'];
+            $this->log("Processing event for lead ID: $leadId, channel: $channelId");
 
-            case 'ChannelDestroyed':
-                $this->handleChannelDestroyed($event, $callLog);
-                break;
+            switch ($eventType) {
+                case 'ChannelStateChange':
+                    $this->handleChannelStateChange($event, $leadId);
+                    break;
 
-            case 'ChannelDtmfReceived':
-                $this->handleDtmfReceived($event, $callLog);
-                break;
+                case 'ChannelDestroyed':
+                    $this->handleChannelDestroyed($event, $leadId);
+                    break;
 
-            default:
-                $this->log("Unhandled event type: $eventType for channel: $channelId", 'DEBUG');
-                break;
+                default:
+                    $this->log("Unhandled event type: $eventType for channel: $channelId", 'DEBUG');
+                    break;
+            }
+
+        } catch (Exception $e) {
+            // Handle database connection errors gracefully
+            if (strpos($e->getMessage(), 'MySQL server has gone away') !== false ||
+                strpos($e->getMessage(), 'Lost connection') !== false) {
+                $this->log("Database connection lost during event processing for channel $channelId: " . $e->getMessage(), 'ERROR');
+                // Don't throw the error, just log it to prevent the WebSocket client from crashing
+            } else {
+                $this->log("Error processing channel event for $channelId: " . $e->getMessage(), 'ERROR');
+                throw $e; // Re-throw non-database errors
+            }
         }
     }
     
-    private function handleChannelStateChange($event, $callLog) {
+    private function handleChannelStateChange($event, $leadId) {
         $state = $event['channel']['state'] ?? null;
         $channelId = $event['channel']['id'];
         $channel = $event['channel'];
 
-        // Update call log status based on ARI channel state events immediately
-        if ($callLog && $callLog['status'] === 'initiated') {
-            switch ($state) {
-                case 'Ring':
-                case 'Ringing':
-                    $this->updateCallLog($callLog['id'], ['status' => 'ringing']);
-                    $this->campaign->updateLeadStatus($callLog['lead_id'], 'ringing');
-                    $this->log("ARI Event: Call ringing - Lead ID: " . $callLog['lead_id'] . ", Channel: $channelId");
-                    break;
-                case 'Up':
-                    $this->updateCallLog($callLog['id'], ['status' => 'answered', 'call_start' => date('Y-m-d H:i:s')]);
-                    $this->campaign->updateLeadStatus($callLog['lead_id'], 'answered');
-                    $this->log("ARI Event: Call answered - Lead ID: " . $callLog['lead_id'] . ", Channel: $channelId");
-                    break;
-                case 'Busy':
-                    $this->updateCallLog($callLog['id'], ['status' => 'busy']);
-                    $this->campaign->updateLeadStatus($callLog['lead_id'], 'busy', 'BUSY');
-                    $this->log("ARI Event: Line busy - Lead ID: " . $callLog['lead_id'] . ", Channel: $channelId");
-                    break;
-                case 'Down':
-                    // Let handleChannelDestroyed handle final status with hangup cause
-                    break;
-            }
-        }
+        $this->log("Channel state change for lead $leadId: $state");
 
         switch ($state) {
+            case 'Ring':
             case 'Ringing':
-                if ($callLog && $callLog['status'] !== 'ringing') {
-                    $this->updateCallLog($callLog['id'], ['status' => 'ringing']);
-                }
+                $this->campaign->updateLeadStatus($leadId, 'ringing');
+                $this->log("ARI Event: Call ringing - Lead ID: $leadId, Channel: $channelId");
                 break;
 
             case 'Up':
                 // Call was answered
-                if ($callLog) {
-                    $updateData = ['status' => 'answered'];
-
-                    // Only set call_start if not already set
-                    if (empty($callLog['call_start'])) {
-                        $updateData['call_start'] = date('Y-m-d H:i:s');
-                    }
-
-                    $this->updateCallLog($callLog['id'], $updateData);
-                    $this->campaign->updateLeadStatus($callLog['lead_id'], 'answered');
-                }
+                $this->campaign->updateLeadStatus($leadId, 'answered');
+                $this->log("ARI Event: Call answered - Lead ID: $leadId, Channel: $channelId");
 
                 // If this is an outbound call managed by our ARI app, connect to agent
                 if (isset($channel['channelvars']['AGENT_EXTENSION'])) {
@@ -357,105 +358,134 @@ class Dialer {
                     $agentContext = $channel['channelvars']['AGENT_CONTEXT'] ?? 'from-internal';
                     $this->connectToAgent($channelId, $agentExtension, $agentContext);
                 }
+                break;
 
+            case 'Busy':
+                $this->campaign->updateLeadStatus($leadId, 'busy', 'BUSY');
+                $this->log("ARI Event: Line busy - Lead ID: $leadId, Channel: $channelId");
                 break;
 
             case 'Down':
-                if ($callLog) {
-                    $this->handleCallEnd($callLog, 'hung_up');
-                }
+                // Will be handled by ChannelDestroyed event
                 break;
         }
     }
     
-    private function handleChannelDestroyed($event, $callLog) {
+    private function handleChannelDestroyed($event, $leadId) {
         $hangupCause = $event['cause'] ?? null;
         $hangupCauseText = $event['cause_txt'] ?? null;
+        $channelId = $event['channel']['id'] ?? null;
 
         // Use ARI hangup cause to determine final call status
         $status = $this->getStatusFromHangupCause($hangupCause);
         $disposition = $this->getDispositionFromHangupCause($hangupCause);
 
-        $this->log("Channel destroyed - Hangup cause: $hangupCause ($hangupCauseText), Status: $status, Disposition: $disposition");
-
-        $this->handleCallEnd($callLog, $status, $disposition);
-    }
-    
-    private function handleCallEnd($callLog, $status, $disposition = null) {
-        $callEnd = date('Y-m-d H:i:s');
-        $duration = 0;
-
-        // Calculate duration if call_start exists
-        if ($callLog['call_start']) {
-            $duration = strtotime($callEnd) - strtotime($callLog['call_start']);
-        }
-
-        $this->log("Ending call - Lead ID: " . $callLog['lead_id'] . ", Status: $status, Disposition: $disposition, Duration: {$duration}s");
-
-        // Update call log with final status from ARI hangup cause
-        $this->updateCallLog($callLog['id'], [
-            'status' => $status,
-            'call_end' => $callEnd,
-            'duration' => $duration,
-            'disposition' => $disposition
-        ]);
+        $this->log("Channel destroyed for lead $leadId - Hangup cause: $hangupCause ($hangupCauseText), Status: $status, Disposition: $disposition");
 
         // Update lead status based on ARI-determined call outcome
-        if ($callLog['lead_id']) {
-            $this->campaign->updateLeadStatus($callLog['lead_id'], $status, $disposition);
+        $this->campaign->updateLeadStatus($leadId, $status, $disposition);
 
-            // Schedule retry for unsuccessful calls
-            if ($status !== 'answered' && $this->shouldRetry($callLog['lead_id'])) {
-                $this->scheduleRetry($callLog['lead_id']);
-            }
+        // Save call to dialer_cdr after call ends
+        $this->saveDialerCdr($leadId, $channelId, $status, $disposition);
+
+        // Schedule retry for unsuccessful calls
+        if ($status !== 'answered' && $this->shouldRetry($leadId)) {
+            $this->scheduleRetry($leadId);
         }
     }
-    
-    private function handleDtmfReceived($event, $callLog) {
-        $digit = $event['digit'] ?? null;
-        
-        if ($digit) {
-            $this->updateCallLog($callLog['id'], [
-                'disposition' => 'DTMF_' . $digit
+
+    private function createDialerCdr($leadId, $channelId, $campaignId, $phoneNumber, $leadName, $agentExtension) {
+        try {
+            $sql = "INSERT INTO dialer_cdr
+                    (campaign_id, lead_id, channel_id, phone_number, lead_name, agent_extension, call_start, status)
+                    VALUES (:campaign_id, :lead_id, :channel_id, :phone_number, :lead_name, :agent_extension, NOW(), 'initiated')";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':campaign_id' => $campaignId,
+                ':lead_id' => $leadId,
+                ':channel_id' => $channelId,
+                ':phone_number' => $phoneNumber,
+                ':lead_name' => $leadName,
+                ':agent_extension' => $agentExtension
             ]);
-        }
-    }
-    
-    private function getCallLogByChannelId($channelId) {
-        $sql = "SELECT * FROM call_logs WHERE channel_id = :channel_id ORDER BY id DESC LIMIT 1";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':channel_id' => $channelId]);
-        return $stmt->fetch();
-    }
-    
-    private function logCall($data) {
-        $sql = "INSERT INTO call_logs (lead_id, campaign_id, phone_number, agent_extension, channel_id, status, call_start)
-                VALUES (:lead_id, :campaign_id, :phone_number, :agent_extension, :channel_id, :status, :call_start)";
 
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([
-            ':lead_id' => $data['lead_id'],
-            ':campaign_id' => $data['campaign_id'],
-            ':phone_number' => $data['phone_number'],
-            ':agent_extension' => $data['agent_extension'],
-            ':channel_id' => $data['channel_id'],
-            ':status' => $data['status'],
-            ':call_start' => $data['call_start'] ?? date('Y-m-d H:i:s')
-        ]);
-    }
-    
-    private function updateCallLog($id, $data) {
-        $setParts = [];
-        $params = [':id' => $id];
-        
-        foreach ($data as $key => $value) {
-            $setParts[] = "$key = :$key";
-            $params[":$key"] = $value;
+            $this->log("Created dialer_cdr record for lead $leadId, channel $channelId");
+        } catch (Exception $e) {
+            $this->log("Error creating dialer_cdr: " . $e->getMessage(), 'ERROR');
         }
-        
-        $sql = "UPDATE call_logs SET " . implode(', ', $setParts) . " WHERE id = :id";
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute($params);
+    }
+
+    private function saveDialerCdr($leadId, $channelId, $status, $disposition) {
+        try {
+            // Try to get CDR record from Asterisk CDR database
+            $cdrDb = Database::getCdrConnectionInstance();
+            $uniqueid = null;
+            $callEnd = null;
+            $duration = 0;
+            $billsec = 0;
+
+            if ($cdrDb && Database::isCdrAvailable()) {
+                // Get the dialer_cdr record to find phone number
+                $sql = "SELECT phone_number FROM dialer_cdr WHERE channel_id = :channel_id LIMIT 1";
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute([':channel_id' => $channelId]);
+                $dialerRecord = $stmt->fetch();
+
+                if ($dialerRecord) {
+                    // Find CDR record by destination number
+                    $cdrSql = "SELECT uniqueid, calldate, duration, billsec, disposition
+                               FROM cdr
+                               WHERE dst = :phone_number
+                               ORDER BY calldate DESC
+                               LIMIT 1";
+                    $cdrStmt = $cdrDb->prepare($cdrSql);
+                    $cdrStmt->execute([':phone_number' => $dialerRecord['phone_number']]);
+                    $cdrRecord = $cdrStmt->fetch();
+
+                    if ($cdrRecord) {
+                        $uniqueid = $cdrRecord['uniqueid'];
+                        $duration = $cdrRecord['duration'];
+                        $billsec = $cdrRecord['billsec'];
+                        // Calculate call end from start + duration
+                        if ($cdrRecord['calldate'] && $duration) {
+                            $callEnd = date('Y-m-d H:i:s', strtotime($cdrRecord['calldate']) + $duration);
+                        }
+                    }
+                }
+            }
+
+            // If no CDR record found, use current time
+            if (!$callEnd) {
+                $callEnd = date('Y-m-d H:i:s');
+            }
+
+            // Update existing dialer_cdr record
+            $updateSql = "UPDATE dialer_cdr
+                          SET uniqueid = :uniqueid,
+                              call_end = :call_end,
+                              duration = :duration,
+                              billsec = :billsec,
+                              disposition = :disposition,
+                              status = :status
+                          WHERE channel_id = :channel_id";
+
+            $updateStmt = $this->db->prepare($updateSql);
+            $updateStmt->execute([
+                ':uniqueid' => $uniqueid,
+                ':call_end' => $callEnd,
+                ':duration' => $duration,
+                ':billsec' => $billsec,
+                ':disposition' => $disposition,
+                ':status' => $status,
+                ':channel_id' => $channelId
+            ]);
+
+            $this->log("Updated dialer_cdr for lead $leadId, channel $channelId, uniqueid: $uniqueid");
+
+        } catch (Exception $e) {
+            $this->log("Error updating dialer_cdr: " . $e->getMessage(), 'ERROR');
+        }
     }
     
     private function shouldRecord() {
