@@ -33,12 +33,18 @@ CREATE TABLE campaigns (
     context VARCHAR(50) DEFAULT 'from-internal',
     outbound_context VARCHAR(50) DEFAULT 'from-internal',
     extension VARCHAR(20) DEFAULT '101',
+    destination_type ENUM('custom', 'ivr', 'queue', 'extension') DEFAULT 'custom',
+    ivr_id INT NULL,
+    queue_extension VARCHAR(20) NULL,
+    agent_extension VARCHAR(20) NULL,
     priority INT DEFAULT 1,
     max_calls_per_minute INT DEFAULT 10,
     retry_attempts INT DEFAULT 3,
     retry_interval INT DEFAULT 300,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME
+    updated_at DATETIME,
+    INDEX idx_destination_type (destination_type),
+    INDEX idx_ivr_id (ivr_id)
 );
 
 -- Leads table
