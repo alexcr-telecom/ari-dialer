@@ -29,10 +29,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($_POST['phone_numbers'])) {
             $phones = explode("\n", $_POST['phone_numbers']);
             $leads = [];
-            foreach ($phones as $phone) {
-                $phone = trim($phone);
-                if (!empty($phone)) {
-                    $leads[] = ['phone' => $phone, 'name' => null];
+            foreach ($phones as $line) {
+                $line = trim($line);
+                if (!empty($line)) {
+                    // Check if line contains comma (CSV format: phone,name)
+                    if (strpos($line, ',') !== false) {
+                        $parts = str_getcsv($line);
+                        $phone = trim($parts[0]);
+                        $name = isset($parts[1]) ? trim($parts[1]) : null;
+                    } else {
+                        // Just a phone number
+                        $phone = $line;
+                        $name = null;
+                    }
+
+                    if (!empty($phone)) {
+                        $leads[] = ['phone' => $phone, 'name' => $name];
+                    }
                 }
             }
             try {
@@ -696,8 +709,11 @@ if (isset($_GET['error']) && $_GET['error'] === 'duplicate_failed') {
                     <form method="POST" enctype="multipart/form-data">
                         <div class="mb-4">
                             <label for="phone_numbers" class="form-label">Phone Numbers (one per line)</label>
-                            <textarea class="form-control" name="phone_numbers" id="phone_numbers" rows="10" 
-                                      placeholder="Enter phone numbers, one per line..."></textarea>
+                            <textarea class="form-control" name="phone_numbers" id="phone_numbers" rows="10"
+                                      placeholder="Enter phone numbers, one per line...&#10;+15551234567,John Smith&#10;5559876543,Jane Doe&#10;Or just phone numbers:&#10;+15551234567&#10;5559876543"></textarea>
+                            <div class="form-text">
+                                You can enter phone numbers with optional names in CSV format (phone,name) or just phone numbers alone.
+                            </div>
                         </div>
                         
                         <div class="mb-4">
