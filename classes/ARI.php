@@ -23,8 +23,7 @@ class ARI {
             'extension' => $extension,
             'context' => $context,
             'priority' => $priority,
-            'timeout' => 120,
-            'app' => $this->app
+            'timeout' => 120
         ];
 
         // Add caller ID as URL parameters (caller[name] and caller[number])
