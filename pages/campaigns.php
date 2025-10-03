@@ -141,6 +141,19 @@ if ($action === 'delete' && $campaignId) {
     }
     $action = 'list';
 }
+
+if ($action === 'duplicate' && $campaignId) {
+    $newId = $campaign->duplicate($campaignId);
+    if ($newId) {
+        // Redirect to prevent duplicate on refresh
+        header('Location: ?page=campaigns&duplicated=' . $newId);
+        exit;
+    } else {
+        // Redirect with error
+        header('Location: ?page=campaigns&error=duplicate_failed');
+        exit;
+    }
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -151,6 +164,23 @@ if ($action === 'delete' && $campaignId) {
         </a>
     <?php endif; ?>
 </div>
+
+<?php
+// Display messages after redirect
+if (isset($_GET['duplicated'])) {
+    $newId = (int)$_GET['duplicated'];
+    echo '<div class="alert alert-success alert-dismissible fade show" role="alert">
+            Campaign duplicated successfully! <a href="?page=campaigns&action=edit&id=' . $newId . '" class="alert-link">Edit the new campaign</a>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>';
+}
+if (isset($_GET['error']) && $_GET['error'] === 'duplicate_failed') {
+    echo '<div class="alert alert-danger alert-dismissible fade show" role="alert">
+            Error duplicating campaign.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>';
+}
+?>
 
 <?php if ($action === 'list'): ?>
     <div class="row mb-4">
@@ -215,6 +245,9 @@ if ($action === 'delete' && $campaignId) {
                             <a href="?page=campaigns&action=edit&id=<?php echo $c['id']; ?>" class="btn btn-sm btn-secondary">
                                 <i class="fas fa-edit"></i>
                             </a>
+                            <button class="btn btn-sm btn-info" onclick="duplicateCampaign(<?php echo $c['id']; ?>)" title="Duplicate Campaign">
+                                <i class="fas fa-copy"></i>
+                            </button>
                             <button class="btn btn-sm btn-danger" onclick="deleteCampaign(<?php echo $c['id']; ?>)">
                                 <i class="fas fa-trash"></i>
                             </button>
@@ -718,6 +751,12 @@ function stopCampaign(id) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({action: 'stop', id: id})
         }).then(() => location.reload());
+    }
+}
+
+function duplicateCampaign(id) {
+    if (confirm('Duplicate this campaign? A copy will be created with status set to paused.')) {
+        window.location.href = `?page=campaigns&action=duplicate&id=${id}`;
     }
 }
 

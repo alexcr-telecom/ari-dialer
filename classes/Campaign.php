@@ -126,6 +126,36 @@ class Campaign {
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([':id' => $id]);
     }
+
+    public function duplicate($id) {
+        // Get the original campaign
+        $original = $this->getById($id);
+        if (!$original) {
+            return false;
+        }
+
+        // Create a copy with modified name
+        $copyData = [
+            'name' => $original['name'] . ' (Copy)',
+            'description' => $original['description'],
+            'status' => 'paused', // Always start as paused
+            'start_date' => $original['start_date'],
+            'end_date' => $original['end_date'],
+            'context' => $original['context'],
+            'outbound_context' => $original['outbound_context'],
+            'extension' => $original['extension'],
+            'destination_type' => $original['destination_type'],
+            'ivr_id' => $original['ivr_id'],
+            'queue_extension' => $original['queue_extension'],
+            'agent_extension' => $original['agent_extension'],
+            'priority' => $original['priority'],
+            'max_calls_per_minute' => $original['max_calls_per_minute'],
+            'retry_attempts' => $original['retry_attempts'],
+            'retry_interval' => $original['retry_interval']
+        ];
+
+        return $this->create($copyData);
+    }
     
     public function addLeadOld($campaignId, $phoneNumber, $name = null) {
         $sql = "INSERT INTO leads (campaign_id, phone_number, name) VALUES (:campaign_id, :phone_number, :name)";
