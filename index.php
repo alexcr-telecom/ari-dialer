@@ -13,6 +13,35 @@ $auth->requireLogin();
 
 $currentUser = $auth->getCurrentUser();
 $page = $_GET['page'] ?? 'dashboard';
+
+// Handle CSV export before any HTML output
+if ($page === 'cdr' && isset($_GET['export']) && $_GET['export'] === 'csv') {
+    require_once __DIR__ . '/classes/CDR.php';
+    $cdr = new CDR();
+
+    $filters = [
+        'date_from' => $_GET['date_from'] ?? '',
+        'date_to' => $_GET['date_to'] ?? '',
+        'phone_number' => $_GET['phone_number'] ?? '',
+        'campaign_id' => $_GET['campaign_id'] ?? '',
+        'disposition' => $_GET['disposition'] ?? '',
+        'agent_extension' => $_GET['agent_extension'] ?? '',
+        'min_duration' => $_GET['min_duration'] ?? '',
+        'max_duration' => $_GET['max_duration'] ?? ''
+    ];
+
+    $filters = array_filter($filters, function($value) { return $value !== ''; });
+
+    $export = $cdr->exportToCSV($filters);
+    if ($export['success']) {
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="' . $export['filename'] . '"');
+        header('Content-Length: ' . filesize($export['filepath']));
+        readfile($export['filepath']);
+        unlink($export['filepath']);
+        exit;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

@@ -20,18 +20,6 @@ $page = max(1, (int)($_GET['page_num'] ?? 1));
 $limit = 50;
 $offset = ($page - 1) * $limit;
 
-if (isset($_GET['export']) && $_GET['export'] === 'csv') {
-    $export = $cdr->exportToCSV($filters);
-    if ($export['success']) {
-        header('Content-Type: application/csv');
-        header('Content-Disposition: attachment; filename="' . $export['filename'] . '"');
-        header('Content-Length: ' . filesize($export['filepath']));
-        readfile($export['filepath']);
-        unlink($export['filepath']);
-        exit;
-    }
-}
-
 $records = $cdr->getCallRecords($filters, $limit, $offset);
 $totalRecords = $cdr->getCallRecordCount($filters);
 $totalPages = ceil($totalRecords / $limit);

@@ -259,32 +259,28 @@ class CDR {
         $file = fopen($filepath, 'w');
 
         fputcsv($file, [
-            'Unique ID', 'Source', 'Destination', 'Caller ID', 'Channel', 'Destination Channel',
-            'Last App', 'Last Data', 'Call Start', 'Answer Time', 'Call End',
-            'Duration (seconds)', 'Bill Seconds', 'Disposition', 'Account Code', 'User Field',
-            'Campaign', 'Lead Name'
+            'Campaign',
+            'Phone Number',
+            'Lead Name',
+            'Agent Extension',
+            'Call Start',
+            'Call End',
+            'Duration (seconds)',
+            'Status',
+            'Disposition'
         ]);
 
         foreach ($records as $record) {
             fputcsv($file, [
-                $record['uniqueid'],
-                $record['src'],
-                $record['dst'],
-                $record['clid'],
-                $record['channel'],
-                $record['dstchannel'],
-                $record['lastapp'],
-                $record['lastdata'],
-                $record['calldate'],
-                $record['answer'],
-                $record['end'],
-                $record['duration'],
-                $record['billsec'],
-                $record['disposition'],
-                $record['accountcode'],
-                $record['userfield'],
-                $record['campaign_name'],
-                $record['lead_name']
+                $record['campaign_name'] ?? '',
+                $record['phone_number'] ?? '',
+                $record['lead_name'] ?? '',
+                $record['agent_extension'] ?? '',
+                $record['calldate'] ?? '',
+                $record['end'] ?? '',
+                $record['duration'] ?? 0,
+                $record['status'] ?? '',
+                $record['disposition'] ?? ''
             ]);
         }
 
