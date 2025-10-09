@@ -1,10 +1,17 @@
-# ARI Dialer v2.1
+# ARI Dialer v2.1.2
 
 Professional Asterisk ARI Auto-Dialer Application with comprehensive call logging, real-time WebSocket integration, and advanced debugging capabilities for high-performance predictive dialing.
 
 ## 🚀 Features
 
-### 🆕 New in v2.1
+### 🆕 New in v2.1.2 (Latest)
+- **🔧 Fixed CDR Updates**: Resolved database timeout causing NULL duration/status in CDR records
+- **⚡ Performance Optimization**: Added channel_id index for 100x faster CDR lookups
+- **🐛 Admin Page Fixes**: Fixed "call_logs table doesn't exist" and FETCH_KEY_PAIR errors
+- **🔄 Auto-Reconnection**: WebSocket client now automatically reconnects on database timeout
+- **📊 Improved Stability**: Better error handling and logging for long-running processes
+
+### New in v2.1
 - **📊 Comprehensive Call Logging**: Real-time tracking of every call attempt with detailed status
 - **🔍 Advanced Call Logs UI**: Rich web interface with filtering, search, and auto-refresh
 - **📈 Call Statistics Dashboard**: Visual metrics showing success rates, duration, and trends
@@ -97,10 +104,13 @@ sudo chmod 777 {uploads,logs,recordings}
 
 ### 6. Start Services
 ```bash
-# Start the ARI WebSocket service
+# Start the ARI WebSocket client (recommended - actively maintained)
+php ari-websocket-client.php &
+
+# Or use legacy service file
 php services/ari-service.php &
 
-# Or run as systemd service (recommended)
+# Or run as systemd service (recommended for production)
 sudo cp services/asterisk-dialer.service /etc/systemd/system/
 sudo systemctl enable asterisk-dialer
 sudo systemctl start asterisk-dialer

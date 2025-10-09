@@ -124,6 +124,7 @@ EXIT;
 - The security tables must be imported AFTER the main schema due to foreign key dependencies
 - Schema has been updated for full MariaDB 5.5.65 compatibility
 - Database creation uses compatible syntax for older MariaDB versions
+- **New in v2.1.2**: Added channel_id index for improved CDR performance
 
 ```bash
 # Import main schema first (REQUIRED)
@@ -131,6 +132,15 @@ mysql -u dialer_user -p asterisk_dialer < sql/schema.sql
 
 # Import security tables second (has foreign key dependencies)
 mysql -u dialer_user -p asterisk_dialer < sql/security_tables.sql
+```
+
+**For Existing Installations (Upgrade from v2.1 to v2.1.2):**
+
+If you're upgrading from a previous version, run this migration to add performance improvements:
+
+```bash
+# Add channel_id index for faster CDR lookups (v2.1.2+)
+mysql -u dialer_user -p asterisk_dialer < sql/migration_add_cdr_channel_index.sql
 ```
 
 **Troubleshooting Database Installation:**
@@ -513,11 +523,14 @@ Add the following configuration:
 
 **Option 1: Run directly (for testing)**
 ```bash
-# Start the ARI service
-php services/ari-service.php
+# Start the ARI WebSocket client (recommended - actively maintained)
+php ari-websocket-client.php
 
 # Or run in background
-nohup php services/ari-service.php > /dev/null 2>&1 &
+nohup php ari-websocket-client.php > /dev/null 2>&1 &
+
+# Alternative: Legacy service file (older implementation)
+php services/ari-service.php
 ```
 
 **Option 2: SystemD Service (recommended for production)**
@@ -771,6 +784,45 @@ sudo asterisk -rx "ari show apps"
 
 # Test WebSocket manually
 php test-websocket.php
+```
+
+### CDR Issues (v2.1.2 Fixes)
+
+**CDR records show NULL duration, status, or disposition**
+```bash
+# This was fixed in v2.1.2 with database reconnection improvements
+# Symptoms: CDR records created but never updated when calls end
+# Cause: MySQL connection timeout in WebSocket client
+
+# Solution 1: Restart WebSocket client (applies fix if code is updated)
+pkill -f ari-websocket-client
+nohup php ari-websocket-client.php > /dev/null 2>&1 &
+
+# Solution 2: Verify database connection in logs
+tail -f logs/error.log | grep -E "Database connection|MySQL server has gone away"
+
+# Solution 3: Add missing channel_id index (improves performance)
+mysql -u dialer_user -p asterisk_dialer < sql/migration_add_cdr_channel_index.sql
+
+# Verify the fix is working - check for successful CDR updates
+tail -f logs/error.log | grep "Updated dialer_cdr"
+```
+
+**Admin page shows "Application Error"**
+```bash
+# Common errors fixed in v2.1.2:
+
+# Error 1: "Table 'asterisk_dialer.call_logs' doesn't exist"
+# Solution: Updated code now uses dialer_cdr table correctly
+
+# Error 2: "FETCH_KEY_PAIR fetch mode requires exactly 2 columns"
+# Solution: Updated settings query to return only 2 columns
+
+# If you still see these errors, update your code:
+git pull origin main
+
+# Clear any PHP opcode cache
+sudo systemctl restart php-fpm  # or apache2
 ```
 
 ## Security Hardening
