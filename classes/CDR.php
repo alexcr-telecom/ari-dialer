@@ -271,6 +271,16 @@ class CDR {
         ]);
 
         foreach ($records as $record) {
+            // Calculate duration if not set but call_start and call_end exist
+            $duration = $record['duration'] ?? 0;
+            if ($duration == 0 && !empty($record['calldate']) && !empty($record['end'])) {
+                $start = strtotime($record['calldate']);
+                $end = strtotime($record['end']);
+                if ($start && $end) {
+                    $duration = $end - $start;
+                }
+            }
+
             fputcsv($file, [
                 $record['campaign_name'] ?? '',
                 $record['phone_number'] ?? '',
@@ -278,7 +288,7 @@ class CDR {
                 $record['agent_extension'] ?? '',
                 $record['calldate'] ?? '',
                 $record['end'] ?? '',
-                $record['duration'] ?? 0,
+                $duration,
                 $record['status'] ?? '',
                 $record['disposition'] ?? ''
             ]);
