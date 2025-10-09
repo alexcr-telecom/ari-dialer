@@ -63,13 +63,13 @@ $activityLogs = $auth->getActivityLogs(50);
 $db = Database::getInstance()->getConnection();
 
 $systemStats = [];
-$sql = "SELECT 
+$sql = "SELECT
             (SELECT COUNT(*) FROM agents) as total_users,
             (SELECT COUNT(*) FROM agents WHERE status = 'available') as online_users,
             (SELECT COUNT(*) FROM campaigns) as total_campaigns,
             (SELECT COUNT(*) FROM campaigns WHERE status = 'active') as active_campaigns,
             (SELECT COUNT(*) FROM leads) as total_leads,
-            (SELECT COUNT(*) FROM call_logs WHERE DATE(created_at) = CURDATE()) as calls_today";
+            (SELECT COUNT(*) FROM dialer_cdr WHERE DATE(call_start) = CURDATE()) as calls_today";
 $stmt = $db->query($sql);
 $systemStats = $stmt->fetch();
 
