@@ -88,7 +88,8 @@ CREATE TABLE dialer_cdr (
     INDEX idx_campaign_id (campaign_id),
     INDEX idx_lead_id (lead_id),
     INDEX idx_uniqueid (uniqueid),
-    INDEX idx_call_start (call_start)
+    INDEX idx_call_start (call_start),
+    INDEX idx_channel_id (channel_id)
 );
 
 -- Agents table
