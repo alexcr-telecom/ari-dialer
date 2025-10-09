@@ -292,6 +292,9 @@ class Dialer {
         $this->log("Processing ARI event: $eventType for channel: $channelId");
 
         try {
+            // Refresh database connection to avoid "MySQL server has gone away" errors
+            $this->db = Database::getInstance()->getConnection();
+
             // Look up the dialer_cdr record by channel_id to get lead and campaign info
             $sql = "SELECT * FROM dialer_cdr WHERE channel_id = :channel_id ORDER BY created_at DESC LIMIT 1";
             $stmt = $this->db->prepare($sql);
@@ -324,8 +327,19 @@ class Dialer {
             // Handle database connection errors gracefully
             if (strpos($e->getMessage(), 'MySQL server has gone away') !== false ||
                 strpos($e->getMessage(), 'Lost connection') !== false) {
-                $this->log("Database connection lost during event processing for channel $channelId: " . $e->getMessage(), 'ERROR');
-                // Don't throw the error, just log it to prevent the WebSocket client from crashing
+                $this->log("Database connection lost during event processing for channel $channelId. Attempting reconnect...", 'WARN');
+
+                try {
+                    // Force reconnection by getting a fresh instance
+                    $this->db = Database::getInstance()->getConnection();
+                    $this->log("Database reconnection successful. Retrying event processing...", 'INFO');
+
+                    // Retry the event processing once
+                    $this->handleChannelEvent($event);
+                    return;
+                } catch (Exception $retryException) {
+                    $this->log("Failed to reconnect and retry event processing: " . $retryException->getMessage(), 'ERROR');
+                }
             } else {
                 $this->log("Error processing channel event for $channelId: " . $e->getMessage(), 'ERROR');
                 throw $e; // Re-throw non-database errors
