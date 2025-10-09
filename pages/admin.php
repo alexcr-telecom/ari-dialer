@@ -74,7 +74,7 @@ $stmt = $db->query($sql);
 $systemStats = $stmt->fetch();
 
 // Get settings
-$sql = "SELECT setting_key, setting_value, description FROM settings ORDER BY setting_key";
+$sql = "SELECT setting_key, setting_value FROM settings ORDER BY setting_key";
 $stmt = $db->query($sql);
 $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 ?>
