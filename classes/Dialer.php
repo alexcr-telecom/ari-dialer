@@ -172,7 +172,8 @@ class Dialer {
             $this->log("Using caller object - Name: '" . $callerId['name'] . "', Number: '" . $callerId['number'] . "'");
 
             // Create the outbound call using ARI originateCall method with CallerID object
-            $response = $this->ari->originateCall($endpoint, $agentExtension, $agentContext, 1, $variables, $callerId);
+            // Pass campaign_id as userfield for CDR tracking
+            $response = $this->ari->originateCall($endpoint, $agentExtension, $agentContext, 1, $variables, $callerId, $campaignId);
 
             $this->log("ARI response: " . json_encode($response));
 

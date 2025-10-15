@@ -19,84 +19,135 @@ class CDR {
         return $this->cdrAvailable && $this->cdrDb !== null;
     }
 
+    /**
+     * Get the dialer database name
+     */
+    private function getDialerDbName() {
+        // Get database name from connection
+        $stmt = $this->dialerDb->query("SELECT DATABASE()");
+        return $stmt->fetchColumn();
+    }
+
     public function getCallRecords($filters = [], $limit = 100, $offset = 0) {
-        // Use dialer_cdr table which has campaign and lead information
-        $sql = "SELECT
-                    dc.id,
-                    dc.uniqueid,
-                    dc.phone_number as dst,
-                    dc.phone_number as src,
-                    dc.lead_name as clid,
-                    dc.channel_id as channel,
-                    '' as dstchannel,
-                    'Dial' as lastapp,
-                    dc.phone_number as lastdata,
-                    dc.call_start as calldate,
-                    dc.call_start as answer,
-                    dc.call_end as end,
-                    dc.duration,
-                    dc.billsec,
-                    dc.disposition,
-                    '' as accountcode,
-                    '' as userfield,
-                    '' as recordingfile,
-                    c.name as campaign_name,
-                    dc.lead_name,
-                    dc.phone_number,
-                    dc.agent_extension
-                FROM dialer_cdr dc
-                LEFT JOIN campaigns c ON dc.campaign_id = c.id
-                WHERE 1=1";
+        // Check if CDR database is available, if yes use asteriskcdrdb.cdr table
+        if ($this->isCdrAvailable()) {
+            // Use asteriskcdrdb.cdr table and filter by userfield (campaign_id)
+            $sql = "SELECT
+                        cdr.uniqueid,
+                        cdr.dst,
+                        cdr.src,
+                        cdr.clid,
+                        cdr.channel,
+                        cdr.dstchannel,
+                        cdr.lastapp,
+                        cdr.lastdata,
+                        cdr.calldate,
+                        cdr.calldate as answer,
+                        DATE_ADD(cdr.calldate, INTERVAL cdr.duration SECOND) as end,
+                        cdr.duration,
+                        cdr.billsec,
+                        cdr.disposition,
+                        cdr.accountcode,
+                        cdr.userfield,
+                        cdr.recordingfile,
+                        c.name as campaign_name,
+                        l.name as lead_name,
+                        cdr.dst as phone_number,
+                        c.extension as agent_extension
+                    FROM asteriskcdrdb.cdr
+                    LEFT JOIN " . $this->getDialerDbName() . ".campaigns c ON cdr.userfield = c.id
+                    LEFT JOIN " . $this->getDialerDbName() . ".leads l ON cdr.dst = l.phone_number AND l.campaign_id = cdr.userfield
+                    WHERE cdr.userfield IS NOT NULL AND cdr.userfield != ''";
+        } else {
+            // Fallback to dialer_cdr table which has campaign and lead information
+            $sql = "SELECT
+                        dc.id,
+                        dc.uniqueid,
+                        dc.phone_number as dst,
+                        dc.phone_number as src,
+                        dc.lead_name as clid,
+                        dc.channel_id as channel,
+                        '' as dstchannel,
+                        'Dial' as lastapp,
+                        dc.phone_number as lastdata,
+                        dc.call_start as calldate,
+                        dc.call_start as answer,
+                        dc.call_end as end,
+                        dc.duration,
+                        dc.billsec,
+                        dc.disposition,
+                        '' as accountcode,
+                        dc.campaign_id as userfield,
+                        '' as recordingfile,
+                        c.name as campaign_name,
+                        dc.lead_name,
+                        dc.phone_number,
+                        dc.agent_extension
+                    FROM dialer_cdr dc
+                    LEFT JOIN campaigns c ON dc.campaign_id = c.id
+                    WHERE 1=1";
+        }
 
         $params = [];
+        $isCdrDb = $this->isCdrAvailable();
+
+        // Determine the column prefix based on the database being used
+        $dateColumn = $isCdrDb ? 'cdr.calldate' : 'dc.call_start';
+        $phoneColumn = $isCdrDb ? 'cdr.dst' : 'dc.phone_number';
+        $campaignColumn = $isCdrDb ? 'cdr.userfield' : 'dc.campaign_id';
+        $dispositionColumn = $isCdrDb ? 'cdr.disposition' : 'dc.disposition';
+        $agentColumn = $isCdrDb ? 'c.extension' : 'dc.agent_extension';
+        $durationColumn = $isCdrDb ? 'cdr.duration' : 'dc.duration';
 
         if (!empty($filters['date_from'])) {
-            $sql .= " AND DATE(dc.call_start) >= :date_from";
+            $sql .= " AND DATE($dateColumn) >= :date_from";
             $params[':date_from'] = $filters['date_from'];
         }
 
         if (!empty($filters['date_to'])) {
-            $sql .= " AND DATE(dc.call_start) <= :date_to";
+            $sql .= " AND DATE($dateColumn) <= :date_to";
             $params[':date_to'] = $filters['date_to'];
         }
 
         if (!empty($filters['phone_number'])) {
-            $sql .= " AND dc.phone_number LIKE :phone_number";
+            $sql .= " AND $phoneColumn LIKE :phone_number";
             $params[':phone_number'] = '%' . $filters['phone_number'] . '%';
         }
 
         if (!empty($filters['campaign_id'])) {
-            $sql .= " AND dc.campaign_id = :campaign_id";
+            $sql .= " AND $campaignColumn = :campaign_id";
             $params[':campaign_id'] = $filters['campaign_id'];
         }
 
         if (!empty($filters['disposition'])) {
-            $sql .= " AND dc.disposition = :disposition";
+            $sql .= " AND $dispositionColumn = :disposition";
             $params[':disposition'] = $filters['disposition'];
         }
 
         if (!empty($filters['agent_extension'])) {
-            $sql .= " AND dc.agent_extension = :agent_extension";
+            $sql .= " AND $agentColumn = :agent_extension";
             $params[':agent_extension'] = $filters['agent_extension'];
         }
 
         if (!empty($filters['min_duration'])) {
-            $sql .= " AND dc.duration >= :min_duration";
+            $sql .= " AND $durationColumn >= :min_duration";
             $params[':min_duration'] = $filters['min_duration'];
         }
 
         if (!empty($filters['max_duration'])) {
-            $sql .= " AND dc.duration <= :max_duration";
+            $sql .= " AND $durationColumn <= :max_duration";
             $params[':max_duration'] = $filters['max_duration'];
         }
 
-        $sql .= " ORDER BY dc.call_start DESC LIMIT :limit OFFSET :offset";
+        $sql .= " ORDER BY $dateColumn DESC LIMIT :limit OFFSET :offset";
 
         // Add limit and offset to params
         $params[':limit'] = $limit;
         $params[':offset'] = $offset;
 
-        $stmt = $this->dialerDb->prepare($sql);
+        // Use the appropriate database connection
+        $db = $isCdrDb ? $this->cdrDb : $this->dialerDb;
+        $stmt = $db->prepare($sql);
 
         // Bind all parameters at once
         foreach ($params as $key => $value) {
@@ -175,77 +226,115 @@ class CDR {
 
 
     public function getCallRecordCount($filters = []) {
-        $sql = "SELECT COUNT(*) as total FROM dialer_cdr dc WHERE 1=1";
+        $isCdrDb = $this->isCdrAvailable();
+
+        if ($isCdrDb) {
+            $sql = "SELECT COUNT(*) as total
+                    FROM asteriskcdrdb.cdr
+                    LEFT JOIN " . $this->getDialerDbName() . ".campaigns c ON cdr.userfield = c.id
+                    WHERE cdr.userfield IS NOT NULL AND cdr.userfield != ''";
+        } else {
+            $sql = "SELECT COUNT(*) as total FROM dialer_cdr dc WHERE 1=1";
+        }
 
         $params = [];
 
+        // Determine the column prefix based on the database being used
+        $dateColumn = $isCdrDb ? 'cdr.calldate' : 'dc.call_start';
+        $phoneColumn = $isCdrDb ? 'cdr.dst' : 'dc.phone_number';
+        $campaignColumn = $isCdrDb ? 'cdr.userfield' : 'dc.campaign_id';
+        $dispositionColumn = $isCdrDb ? 'cdr.disposition' : 'dc.disposition';
+        $agentColumn = $isCdrDb ? 'c.extension' : 'dc.agent_extension';
+
         if (!empty($filters['date_from'])) {
-            $sql .= " AND DATE(dc.call_start) >= :date_from";
+            $sql .= " AND DATE($dateColumn) >= :date_from";
             $params[':date_from'] = $filters['date_from'];
         }
 
         if (!empty($filters['date_to'])) {
-            $sql .= " AND DATE(dc.call_start) <= :date_to";
+            $sql .= " AND DATE($dateColumn) <= :date_to";
             $params[':date_to'] = $filters['date_to'];
         }
 
         if (!empty($filters['phone_number'])) {
-            $sql .= " AND dc.phone_number LIKE :phone_number";
+            $sql .= " AND $phoneColumn LIKE :phone_number";
             $params[':phone_number'] = '%' . $filters['phone_number'] . '%';
         }
 
         if (!empty($filters['campaign_id'])) {
-            $sql .= " AND dc.campaign_id = :campaign_id";
+            $sql .= " AND $campaignColumn = :campaign_id";
             $params[':campaign_id'] = $filters['campaign_id'];
         }
 
         if (!empty($filters['disposition'])) {
-            $sql .= " AND dc.disposition = :disposition";
+            $sql .= " AND $dispositionColumn = :disposition";
             $params[':disposition'] = $filters['disposition'];
         }
 
         if (!empty($filters['agent_extension'])) {
-            $sql .= " AND dc.agent_extension = :agent_extension";
+            $sql .= " AND $agentColumn = :agent_extension";
             $params[':agent_extension'] = $filters['agent_extension'];
         }
 
-        $stmt = $this->dialerDb->prepare($sql);
+        $db = $isCdrDb ? $this->cdrDb : $this->dialerDb;
+        $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $result = $stmt->fetch();
         return $result['total'];
     }
 
     public function getStatistics($filters = []) {
-        $sql = "SELECT
-                    COUNT(*) as total_calls,
-                    COUNT(CASE WHEN dc.disposition = 'ANSWERED' THEN 1 END) as answered_calls,
-                    COUNT(CASE WHEN dc.disposition = 'BUSY' THEN 1 END) as busy_calls,
-                    COUNT(CASE WHEN dc.disposition = 'NO ANSWER' THEN 1 END) as no_answer_calls,
-                    COUNT(CASE WHEN dc.disposition NOT IN ('ANSWERED', 'BUSY', 'NO ANSWER') THEN 1 END) as failed_calls,
-                    AVG(dc.duration) as avg_duration,
-                    SUM(dc.duration) as total_duration,
-                    ROUND((COUNT(CASE WHEN dc.disposition = 'ANSWERED' THEN 1 END) / COUNT(*)) * 100, 2) as answer_rate
-                FROM dialer_cdr dc
-                WHERE dc.call_start IS NOT NULL";
+        $isCdrDb = $this->isCdrAvailable();
+
+        if ($isCdrDb) {
+            $sql = "SELECT
+                        COUNT(*) as total_calls,
+                        COUNT(CASE WHEN cdr.disposition = 'ANSWERED' THEN 1 END) as answered_calls,
+                        COUNT(CASE WHEN cdr.disposition = 'BUSY' THEN 1 END) as busy_calls,
+                        COUNT(CASE WHEN cdr.disposition = 'NO ANSWER' THEN 1 END) as no_answer_calls,
+                        COUNT(CASE WHEN cdr.disposition NOT IN ('ANSWERED', 'BUSY', 'NO ANSWER') THEN 1 END) as failed_calls,
+                        AVG(cdr.duration) as avg_duration,
+                        SUM(cdr.duration) as total_duration,
+                        ROUND((COUNT(CASE WHEN cdr.disposition = 'ANSWERED' THEN 1 END) / COUNT(*)) * 100, 2) as answer_rate
+                    FROM asteriskcdrdb.cdr
+                    WHERE cdr.calldate IS NOT NULL
+                    AND cdr.userfield IS NOT NULL AND cdr.userfield != ''";
+        } else {
+            $sql = "SELECT
+                        COUNT(*) as total_calls,
+                        COUNT(CASE WHEN dc.disposition = 'ANSWERED' THEN 1 END) as answered_calls,
+                        COUNT(CASE WHEN dc.disposition = 'BUSY' THEN 1 END) as busy_calls,
+                        COUNT(CASE WHEN dc.disposition = 'NO ANSWER' THEN 1 END) as no_answer_calls,
+                        COUNT(CASE WHEN dc.disposition NOT IN ('ANSWERED', 'BUSY', 'NO ANSWER') THEN 1 END) as failed_calls,
+                        AVG(dc.duration) as avg_duration,
+                        SUM(dc.duration) as total_duration,
+                        ROUND((COUNT(CASE WHEN dc.disposition = 'ANSWERED' THEN 1 END) / COUNT(*)) * 100, 2) as answer_rate
+                    FROM dialer_cdr dc
+                    WHERE dc.call_start IS NOT NULL";
+        }
 
         $params = [];
 
+        $dateColumn = $isCdrDb ? 'cdr.calldate' : 'dc.call_start';
+        $campaignColumn = $isCdrDb ? 'cdr.userfield' : 'dc.campaign_id';
+
         if (!empty($filters['date_from'])) {
-            $sql .= " AND DATE(dc.call_start) >= :date_from";
+            $sql .= " AND DATE($dateColumn) >= :date_from";
             $params[':date_from'] = $filters['date_from'];
         }
 
         if (!empty($filters['date_to'])) {
-            $sql .= " AND DATE(dc.call_start) <= :date_to";
+            $sql .= " AND DATE($dateColumn) <= :date_to";
             $params[':date_to'] = $filters['date_to'];
         }
 
         if (!empty($filters['campaign_id'])) {
-            $sql .= " AND dc.campaign_id = :campaign_id";
+            $sql .= " AND $campaignColumn = :campaign_id";
             $params[':campaign_id'] = $filters['campaign_id'];
         }
 
-        $stmt = $this->dialerDb->prepare($sql);
+        $db = $isCdrDb ? $this->cdrDb : $this->dialerDb;
+        $stmt = $db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetch();
     }
@@ -305,8 +394,16 @@ class CDR {
     }
 
     public function getDispositions() {
-        $sql = "SELECT DISTINCT disposition FROM dialer_cdr WHERE disposition IS NOT NULL AND disposition != '' ORDER BY disposition";
-        $stmt = $this->dialerDb->query($sql);
+        $isCdrDb = $this->isCdrAvailable();
+
+        if ($isCdrDb) {
+            $sql = "SELECT DISTINCT disposition FROM asteriskcdrdb.cdr WHERE disposition IS NOT NULL AND disposition != '' AND userfield IS NOT NULL AND userfield != '' ORDER BY disposition";
+            $stmt = $this->cdrDb->query($sql);
+        } else {
+            $sql = "SELECT DISTINCT disposition FROM dialer_cdr WHERE disposition IS NOT NULL AND disposition != '' ORDER BY disposition";
+            $stmt = $this->dialerDb->query($sql);
+        }
+
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 

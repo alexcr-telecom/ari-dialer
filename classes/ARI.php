@@ -14,7 +14,7 @@ class ARI {
         $this->app = Config::ARI_APP;
     }
     
-    public function originateCall($endpoint, $extension, $context = null, $priority = 1, $variables = [], $callerId = null) {
+    public function originateCall($endpoint, $extension, $context = null, $priority = 1, $variables = [], $callerId = null, $userfield = null) {
         $context = $context ?? Config::ASTERISK_CONTEXT;
 
         // Build URL parameters (endpoint, extension, context, etc.)
@@ -25,6 +25,11 @@ class ARI {
             'priority' => $priority,
             'timeout' => 120
         ];
+
+        // Add userfield if provided (for CDR tracking)
+        if ($userfield !== null) {
+            $variables['CDR(userfield)'] = (string)$userfield;
+        }
 
         // Add caller ID as URL parameters (caller[name] and caller[number])
         // Also add connected ID (connected[name] and connected[number])
