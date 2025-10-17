@@ -35,9 +35,14 @@ class Config {
     // Directories
     const UPLOAD_DIR = '../uploads/';
     const LOG_DIR = '../logs/';
+    const RECORDING_DIR = '../recordings/';
 
     // Helper Methods
     public static function getARIUrl() {
         return "http://" . self::ARI_HOST . ":" . self::ARI_PORT . "/ari";
+    }
+
+    public static function getWebSocketUrl() {
+        return "ws://" . self::ARI_HOST . ":" . self::ARI_PORT . "/ari/events";
     }
 }
